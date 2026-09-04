@@ -1,0 +1,858 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Árbol de Bloques — Generador de QR 3D</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,600;1,9..144,500&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js"></script>
+<style>
+  :root{
+    --bg:#f6f1e7; --ink:#2b2318; --ink-soft:#6b5f4f;
+    --panel:#fffdf8; --line:rgba(43,35,24,0.12); --accent:#c97a3d;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;height:100%;}
+  body{
+    background: radial-gradient(circle at 20% 0%, #fbf7ef 0%, var(--bg) 55%);
+    font-family:'Inter',sans-serif; color:var(--ink);
+    display:flex; flex-direction:column; min-height:100vh;
+  }
+  header{ padding: 26px clamp(20px,4vw,48px) 6px; }
+  h1{ font-family:'Fraunces',serif; font-weight:600; font-size:clamp(26px,4vw,36px); margin:0 0 6px; letter-spacing:-0.01em; }
+  header p{ margin:0; color:var(--ink-soft); font-size:14.5px; max-width:540px; line-height:1.5; }
+  main{ flex:1; display:grid; grid-template-columns:300px 1fr; gap:0; padding:12px clamp(20px,4vw,48px) clamp(20px,4vw,48px); }
+  @media (max-width:880px){ main{ grid-template-columns:1fr; } }
+  .panel{ background:var(--panel); border:1px solid var(--line); border-radius:18px; padding:20px; height:fit-content; display:flex; flex-direction:column; gap:18px; }
+  .field label{ display:block; font-size:13px; font-weight:600; margin-bottom:8px; }
+  .field input[type=text]{ width:100%; padding:11px 12px; border-radius:10px; border:1px solid var(--line); font-family:'Inter',sans-serif; font-size:14px; background:#fff; color:var(--ink); }
+  .field input[type=text]:focus{ outline:2px solid var(--accent); outline-offset:1px; }
+  .seasons{ display:grid; grid-template-columns:1fr 1fr; gap:8px; }
+  .season-btn{ border:1px solid var(--line); background:#fff; border-radius:12px; padding:10px 8px; font-size:13px; font-weight:500; cursor:pointer; display:flex; align-items:center; gap:8px; color:var(--ink); transition:all .2s; }
+  .season-btn .dot{ width:10px; height:10px; border-radius:50%; flex-shrink:0; }
+  .season-btn.active{ border-color:var(--ink); background:#f4efe3; transform:scale(0.98); }
+  .generate-btn{ width:100%; padding:13px; border-radius:12px; border:none; background:var(--ink); color:#fdf9f0; font-weight:600; font-size:14px; cursor:pointer; transition:opacity .2s; }
+  .generate-btn:hover{ opacity:.92; }
+  .divider{ height:1px; background:var(--line); }
+  .ghost-btn{ width:100%; padding:11px; border-radius:12px; border:1px solid var(--line); background:#fff; color:var(--ink); font-weight:500; font-size:13px; cursor:pointer; transition:all .2s; }
+  .ghost-btn:hover{ background:#faf8f3; }
+  .flatqr-wrap{ display:flex; flex-direction:column; align-items:center; gap:10px; }
+  .flatqr-wrap canvas{ border-radius:8px; border:1px solid var(--line); }
+  .flatqr-note{ font-size:12px; color:var(--ink-soft); text-align:center; line-height:1.4; }
+  .stage{ position:relative; border-radius:18px; overflow:hidden; min-height:520px; margin-left:16px; border:1px solid var(--line); cursor:grab; display:flex; flex-direction:column; background: linear-gradient(180deg, #fbf7ef 0%, #f0ebe0 100%); }
+  @media (max-width:880px){ .stage{ margin-left:0; margin-top:16px; min-height:400px; } }
+  .stage:active{ cursor:grabbing; }
+  .canvas-wrap{ position:relative; flex:1; }
+  .canvas-wrap canvas{ display:block; width:100%; height:100%; }
+  .badge{ position:absolute; top:14px; left:14px; font-size:12px; font-weight:600; background:rgba(255,255,255,0.85); backdrop-filter:blur(8px); padding:6px 14px; border-radius:999px; pointer-events:none; box-shadow:0 2px 8px rgba(0,0,0,0.04); transition:all .3s; }
+  .hint{ position:absolute; bottom:14px; left:50%; transform:translateX(-50%); font-size:12px; color:rgba(43,35,24,0.5); background:rgba(255,255,255,0.7); padding:6px 14px; border-radius:999px; backdrop-filter:blur(4px); pointer-events:none; }
+  .stage-actions{ display:flex; gap:10px; padding:14px; background:var(--panel); border-top:1px solid var(--line); flex-wrap:wrap; }
+  .stage-actions button{ flex:1; min-width:140px; padding:11px; border-radius:12px; font-weight:600; font-size:13px; cursor:pointer; border:1px solid var(--line); background:#fff; color:var(--ink); transition:all .2s; }
+  .stage-actions button:hover{ transform:translateY(-1px); box-shadow:0 4px 12px rgba(0,0,0,0.06); }
+  .stage-actions .primary{ background:var(--ink); color:#fdf9f0; border-color:var(--ink); }
+  .stage-actions .primary:hover{ background:#3d3226; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Árbol de Bloques</h1>
+  <p>El suelo es tu código QR real. La grama crece en sus módulos oscuros y del centro brota un árbol procedural.</p>
+</header>
+
+<main>
+  <div class="panel">
+    <div class="field">
+      <label for="urlInput">Tu enlace</label>
+      <input type="text" id="urlInput" value="https://https://github.com/andregil003" placeholder="https://tuenlace.com" />
+    </div>
+
+    <div class="field">
+      <label>Temporada</label>
+      <div class="seasons" id="seasonPicker"></div>
+    </div>
+
+    <button class="generate-btn" id="generateBtn">Generar árbol</button>
+
+    <div class="divider"></div>
+
+    <button class="ghost-btn" id="downloadTreeBtn">Descargar imagen de la escena</button>
+
+    <div class="divider"></div>
+
+    <div class="flatqr-wrap">
+      <canvas id="flatQr" width="180" height="180"></canvas>
+      <p class="flatqr-note">QR real listo para escanear con la cámara.</p>
+      <button class="ghost-btn" id="downloadFlatBtn">Descargar QR</button>
+    </div>
+  </div>
+
+  <div class="stage" id="stage">
+    <div class="canvas-wrap" id="canvasWrap">
+      <div class="badge" id="modeBadge">🌳 Árbol</div>
+      <div class="hint">Arrastra para girar · rueda para acercar</div>
+    </div>
+    <div class="stage-actions">
+      <button class="primary" id="toggleGrowBtn">Aplanar a QR</button>
+      <button id="visitLinkBtn">Visitar enlace</button>
+    </div>
+  </div>
+</main>
+
+<script>
+/* ---------- Paletas ---------- */
+const SEASONS = {
+  spring: { 
+    label:'Primavera', dot:'#e91e63',
+    qrBase:'#fff8e1', qrDark:'#3e2723',
+    trunk:'#5D4037', branch:'#795548',
+    canopy:['#f48fb1','#ec407a','#f8bbd0','#c2185b','#f06292','#ffffff','#e91e63'],
+    grass:['#aed581','#c5e1a5','#dcedc8','#81c784','#a5d6a7'],
+    leafChance:0.94,
+    particleColor: 0xffb7d5, particleSpeed: 0.3, particleType:'petal',
+    bg: 0xfff5f8, fallingLeafColor:'#f48fb1', markColor:'#4e342e'
+  },
+  summer: { 
+    label:'Verano', dot:'#2e7d32',
+    qrBase:'#f1f8e9', qrDark:'#1b5e20',
+    trunk:'#4e342e', branch:'#6d4c41',
+    canopy:['#2e7d32','#43a047','#1b5e20','#66bb6a','#388e3c','#81c784','#4caf50'],
+    grass:['#66bb6a','#81c784','#4caf50','#388e3c','#a5d6a7'],
+    leafChance:0.96,
+    particleColor: 0xc8e6c9, particleSpeed: 0.15, particleType:'pollen',
+    bg: 0xf5faf5, fallingLeafColor:'#66bb6a', markColor:'#3e2723'
+  },
+  autumn: { 
+    label:'Otoño', dot:'#e65100',
+    qrBase:'#fff8e1', qrDark:'#5d4037',
+    trunk:'#3e2723', branch:'#5d4037',
+    canopy:['#e65100','#f57c00','#ffca28','#d84315','#bf360c','#ffb74d','#ff6f00'],
+    grass:['#d7ccc8','#bcaaa4','#a1887f','#d84315','#e65100'],
+    leafChance:0.9,
+    particleColor: 0xffa040, particleSpeed: 0.7, particleType:'leaf',
+    bg: 0xfaf5f0, fallingLeafColor:'#e65100', markColor:'#3e2723'
+  },
+  winter: { 
+    label:'Invierno', dot:'#1565c0',
+    qrBase:'#eceff1', qrDark:'#37474f',
+    trunk:'#263238', branch:'#37474f',
+    canopy:['#eceff1','#b0bec5','#90a4ae','#cfd8dc','#e0e0e0','#ffffff'],
+    grass:['#eceff1','#cfd8dc','#b0bec5','#90a4ae','#ffffff'],
+    leafChance:0.12,
+    particleColor: 0xffffff, particleSpeed: 1.0, particleType:'snow',
+    bg: 0xf0f4f8, fallingLeafColor:'#ffffff', markColor:'#263238'
+  }
+};
+let currentSeason = 'summer';
+
+const seasonPicker = document.getElementById('seasonPicker');
+Object.entries(SEASONS).forEach(([key, s]) => {
+  const btn = document.createElement('button');
+  btn.type = 'button';
+  btn.className = 'season-btn' + (key === currentSeason ? ' active' : '');
+  btn.innerHTML = `<span class="dot" style="background:${s.dot}"></span>${s.label}`;
+  btn.addEventListener('click', () => {
+    currentSeason = key;
+    document.querySelectorAll('.season-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    generate();
+  });
+  seasonPicker.appendChild(btn);
+});
+document.getElementById('urlInput').addEventListener('keydown', e => { if (e.key === 'Enter') generate(); });
+document.getElementById('generateBtn').addEventListener('click', generate);
+document.getElementById('visitLinkBtn').addEventListener('click', () => {
+  const v = document.getElementById('urlInput').value.trim();
+  if (v) window.open(v.match(/^https?:\/\//) ? v : 'https://' + v, '_blank');
+});
+
+/* ---------- Three.js ---------- */
+const canvasWrap = document.getElementById('canvasWrap');
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(SEASONS[currentSeason].bg);
+scene.fog = new THREE.Fog(SEASONS[currentSeason].bg, 18, 45);
+
+const frustum = 11;
+let camera = new THREE.OrthographicCamera(-frustum, frustum, frustum, -frustum, 0.1, 100);
+const renderer = new THREE.WebGLRenderer({ antialias:true, preserveDrawingBuffer:true, alpha:true });
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.35;
+renderer.outputEncoding = THREE.sRGBEncoding;
+canvasWrap.insertBefore(renderer.domElement, canvasWrap.firstChild);
+
+scene.add(new THREE.AmbientLight(0xffffff, 0.5));
+const hemi = new THREE.HemisphereLight(0xfff8e1, 0x8d7f6f, 0.6);
+scene.add(hemi);
+
+const sun = new THREE.DirectionalLight(0xfff0dd, 1.6);
+sun.position.set(10, 24, 8);
+sun.castShadow = true;
+sun.shadow.mapSize.width = 2048;
+sun.shadow.mapSize.height = 2048;
+sun.shadow.camera.left = -20; sun.shadow.camera.right = 20;
+sun.shadow.camera.top = 20; sun.shadow.camera.bottom = -20;
+sun.shadow.camera.near = 0.5; sun.shadow.camera.far = 60;
+sun.shadow.bias = -0.0005; sun.shadow.radius = 5;
+scene.add(sun);
+
+const fill = new THREE.DirectionalLight(0xdce8ff, 0.6);
+fill.position.set(-8, 14, -8);
+scene.add(fill);
+
+const rim = new THREE.DirectionalLight(0xffe0b2, 0.4);
+rim.position.set(0, 7, -16);
+scene.add(rim);
+
+const target = new THREE.Vector3(0, 2.5, 0);
+let radius = 22, theta = 0.78, phi = 0.82;
+let dragging = false, lastX = 0, lastY = 0;
+
+function updateCamera(){
+  camera.position.set(
+    target.x + radius * Math.sin(phi) * Math.sin(theta),
+    target.y + radius * Math.cos(phi),
+    target.z + radius * Math.sin(phi) * Math.cos(theta)
+  );
+  camera.lookAt(target);
+}
+renderer.domElement.addEventListener('pointerdown', e => { dragging = true; lastX = e.clientX; lastY = e.clientY; });
+window.addEventListener('pointerup', () => dragging = false);
+window.addEventListener('pointermove', e => {
+  if (!dragging) return;
+  theta -= (e.clientX - lastX) * 0.006;
+  phi = Math.min(Math.max(phi - (e.clientY - lastY) * 0.006, 0.25), 1.4);
+  lastX = e.clientX; lastY = e.clientY;
+});
+renderer.domElement.addEventListener('wheel', e => {
+  e.preventDefault();
+  const s = Math.min(Math.max(camera.top + e.deltaY * 0.008, 4), 24);
+  const a = canvasWrap.clientWidth / (canvasWrap.clientHeight || 520);
+  camera.left = -s*a; camera.right = s*a; camera.top = s; camera.bottom = -s;
+  camera.updateProjectionMatrix();
+}, { passive:false });
+
+function resize(){
+  const w = canvasWrap.clientWidth, h = canvasWrap.clientHeight || 520;
+  renderer.setSize(w, h);
+  const a = w/h, s = camera.top;
+  camera.left = -s*a; camera.right = s*a;
+  camera.updateProjectionMatrix();
+}
+window.addEventListener('resize', resize);
+
+/* ---------- Estado ---------- */
+let growth = 1, growthTarget = 1, animTime = 0;
+const toggleBtn = document.getElementById('toggleGrowBtn');
+const modeBadge = document.getElementById('modeBadge');
+toggleBtn.addEventListener('click', () => {
+  growthTarget = growthTarget === 1 ? 0 : 1;
+  toggleBtn.textContent = growthTarget === 1 ? 'Aplanar a QR' : 'Hacer crecer el árbol';
+  modeBadge.textContent = growthTarget === 1 ? '🌳 Árbol' : '▦ QR';
+});
+
+/* ---------- Partículas ---------- */
+let particleSystem = null;
+function createParticles(season) {
+  if (particleSystem) { scene.remove(particleSystem); particleSystem.geometry.dispose(); particleSystem.material.dispose(); }
+  const count = 200;
+  const geo = new THREE.BufferGeometry();
+  const pos = new Float32Array(count*3), vel = new Float32Array(count*3), ph = new Float32Array(count);
+  for (let i=0;i<count;i++){
+    pos[i*3]=(Math.random()-0.5)*18; pos[i*3+1]=Math.random()*14; pos[i*3+2]=(Math.random()-0.5)*18;
+    vel[i*3]=(Math.random()-0.5)*0.01; vel[i*3+1]=-season.particleSpeed*0.01-Math.random()*0.005; vel[i*3+2]=(Math.random()-0.5)*0.01;
+    ph[i]=Math.random()*Math.PI*2;
+  }
+  geo.setAttribute('position', new THREE.BufferAttribute(pos,3));
+  geo.setAttribute('velocity', new THREE.BufferAttribute(vel,3));
+  geo.setAttribute('phase', new THREE.BufferAttribute(ph,1));
+  const mat = new THREE.PointsMaterial({
+    color: season.particleColor, size: season.particleType==='snow'?0.12:0.07,
+    transparent:true, opacity:0.65, sizeAttenuation:true, depthWrite:false, blending:THREE.AdditiveBlending
+  });
+  particleSystem = new THREE.Points(geo, mat);
+  scene.add(particleSystem);
+}
+function updateParticles(season) {
+  if (!particleSystem) return;
+  const p=particleSystem.geometry.attributes.position.array, v=particleSystem.geometry.attributes.velocity.array, ph=particleSystem.geometry.attributes.phase.array;
+  for (let i=0;i<p.length/3;i++){
+    const ix=i*3, iy=i*3+1, iz=i*3+2;
+    p[ix]+=v[ix]+Math.sin(animTime*2+ph[i])*0.008;
+    p[iy]+=v[iy];
+    p[iz]+=v[iz]+Math.cos(animTime*1.5+ph[i])*0.004;
+    if (p[iy]<-0.5){ p[iy]=14; p[ix]=(Math.random()-0.5)*18; p[iz]=(Math.random()-0.5)*18; }
+  }
+  particleSystem.geometry.attributes.position.needsUpdate=true;
+}
+
+/* ---------- Árbol procedural ---------- */
+let groundInst, qrBaseInst, woodInst, leafInst, decorInst, grassInst, fallenInst, markInst;
+let woodPieces=[], leafPieces=[], decorPieces=[], grassPieces=[], fallenPieces=[], markPieces=[];
+const unit = 0.24, groundH = 0.12;
+
+function easeOutElastic(x){ const c4=(2*Math.PI)/3; return x===0?0:x===1?1:Math.pow(2,-10*x)*Math.sin((x*10-0.75)*c4)+1; }
+function easeInOutCubic(x){ return x<0.5?4*x*x*x:1-Math.pow(-2*x+2,3)/2; }
+function rand(min, max){ return min + Math.random()*(max-min); }
+
+const _v = new THREE.Vector3();
+function quatFromDir(dir, up=new THREE.Vector3(0,1,0)){
+  const d = dir.clone().normalize();
+  const axis = new THREE.Vector3().crossVectors(up,d).normalize();
+  const angle = Math.acos(Math.max(-1,Math.min(1,up.dot(d))));
+  if (axis.lengthSq()<0.001) return new THREE.Quaternion();
+  return new THREE.Quaternion().setFromAxisAngle(axis, angle);
+}
+
+function generateTree(season){
+  woodPieces=[]; leafPieces=[]; decorPieces=[]; grassPieces=[]; fallenPieces=[]; markPieces=[];
+  const occupied = new Set();
+  const occKey = (x,y,z)=>`${Math.round(x/(unit*0.3))},${Math.round(y/(unit*0.3))},${Math.round(z/(unit*0.3))}`;
+  
+  function addWood(x,y,z, sx,sy,sz, rot, delay){
+    const k=occKey(x,y,z);
+    if (occupied.has(k)) return;
+    occupied.add(k);
+    woodPieces.push({x,y,z, sx,sy,sz, rot, delay});
+  }
+  function addLeaf(x,y,z, scale, colorIdx, delay){
+    leafPieces.push({x,y,z, scale, colorIdx, delay, phase: Math.random()*Math.PI*2});
+  }
+  function addDecor(x,y,z, scale, color, delay){
+    decorPieces.push({x,y,z, scale, color, delay});
+  }
+  function addFallen(x,y,z, scale, color, delay, rotY){
+    fallenPieces.push({x,y,z, scale, color, delay, rotY, phase: Math.random()*Math.PI*2});
+  }
+  function addMark(x,y,z, sx,sz, color, delay){
+    markPieces.push({x,y,z, sx, sz, color, delay});
+  }
+
+  // === TRONCO ORGÁNICO Y DENSO ===
+  const trunkH = rand(3.0, 4.5);
+  const points = [];
+  const nPoints = 8;
+  for (let i=0; i<nPoints; i++){
+    const t = i/(nPoints-1);
+    const y = groundH + unit*0.5 + t*trunkH;
+    const cx = Math.sin(t*Math.PI*rand(0.8,1.4))*rand(0.2,0.6);
+    const cz = (Math.cos(t*Math.PI*rand(0.6,1.1))-1)*rand(0.15,0.4);
+    points.push(new THREE.Vector3(cx, y, cz));
+  }
+  
+  const curve = new THREE.CatmullRomCurve3(points);
+  const curvePoints = curve.getPoints(80);
+  
+  for (let i=0; i<curvePoints.length-1; i++){
+    const t = i/curvePoints.length;
+    const p1 = curvePoints[i];
+    const p2 = curvePoints[i+1];
+    const dir = new THREE.Vector3().subVectors(p2,p1);
+    const len = dir.length();
+    const mid = new THREE.Vector3().lerpVectors(p1,p2,0.5);
+    const rot = quatFromDir(dir);
+    const thick = 0.75 * (1 - t*0.45);
+    
+    // Llenado denso: grid circular de cubos pequeños
+    const fillUnit = unit * 0.35;
+    const rSteps = Math.max(1, Math.ceil(thick / fillUnit));
+    for (let rx=-rSteps; rx<=rSteps; rx++){
+      for (let rz=-rSteps; rz<=rSteps; rz++){
+        const dx = rx*fillUnit;
+        const dz = rz*fillUnit;
+        if (dx*dx + dz*dz <= thick*thick*0.55) {
+          const wx = mid.x + dx;
+          const wz = mid.z + dz;
+          addWood(wx, mid.y, wz, fillUnit*0.85, len+0.02, fillUnit*0.85, rot, t*0.12);
+        }
+      }
+    }
+  }
+
+  // === RAMIFICACIÓN RECURSIVA DENSA ===
+  const leafClusters = [];
+  const topPoint = points[points.length-1];
+  
+  function growBranch(start, dir, length, thickness, depth, maxDepth, parentDelay){
+    if (depth>maxDepth || length<0.3 || thickness<0.08) {
+      leafClusters.push({pos: start.clone(), radius: rand(1.0, 1.6), delay: parentDelay});
+      return;
+    }
+    
+    const end = new THREE.Vector3().copy(start).add(dir.clone().multiplyScalar(length));
+    const c1 = new THREE.Vector3().lerpVectors(start, end, 0.33).add(new THREE.Vector3(rand(-0.2,0.2), rand(-0.15,0.2), rand(-0.2,0.2)));
+    const c2 = new THREE.Vector3().lerpVectors(start, end, 0.66).add(new THREE.Vector3(rand(-0.2,0.2), rand(-0.15,0.2), rand(-0.2,0.2)));
+    const subCurve = new THREE.CatmullRomCurve3([start, c1, c2, end]);
+    const subPoints = subCurve.getPoints(Math.max(6, Math.ceil(length*8)));
+    
+    for (let i=0; i<subPoints.length-1; i++){
+      const t = i/(subPoints.length-1);
+      const p1 = subPoints[i];
+      const p2 = subPoints[i+1];
+      const segDir = new THREE.Vector3().subVectors(p2,p1);
+      const segLen = segDir.length();
+      const mid = new THREE.Vector3().lerpVectors(p1,p2,0.5);
+      const rot = quatFromDir(segDir);
+      const thick = thickness * (1 - t*0.08);
+      
+      // Llenado denso circular
+      const fillUnit = unit * 0.32;
+      const rSteps = Math.max(1, Math.ceil(thick / fillUnit));
+      for (let rx=-rSteps; rx<=rSteps; rx++){
+        for (let rz=-rSteps; rz<=rSteps; rz++){
+          const dx = rx*fillUnit;
+          const dz = rz*fillUnit;
+          if (dx*dx + dz*dz <= thick*thick*0.5) {
+            addWood(mid.x+dx, mid.y, mid.z+dz, fillUnit*0.85, segLen+0.015, fillUnit*0.85, rot, parentDelay + t*0.06);
+          }
+        }
+      }
+    }
+    
+    const nBranches = depth===0 ? Math.floor(rand(4,6)) : (depth===1?3:2);
+    for (let b=0; b<nBranches; b++){
+      const angle = (b/(nBranches-1 || 1) - 0.5)*rand(1.0,1.4) + rand(-0.3,0.3);
+      const elev = rand(0.2, 0.5);
+      const newDir = dir.clone().applyAxisAngle(new THREE.Vector3(0,1,0), angle);
+      newDir.applyAxisAngle(new THREE.Vector3(1,0,0), elev).normalize();
+      newDir.y += 0.06; newDir.normalize();
+      const newLen = length * rand(0.5, 0.7);
+      const newThick = thickness * rand(0.55, 0.7);
+      growBranch(end, newDir, newLen, newThick, depth+1, maxDepth, parentDelay + 0.06);
+    }
+  }
+  
+  for (let i=0; i<5; i++){
+    const angle = (i/5)*Math.PI*2 + rand(-0.3,0.3);
+    const elev = rand(0.4, 0.7);
+    const d = new THREE.Vector3(Math.cos(angle)*Math.cos(elev), Math.sin(elev), Math.sin(angle)*Math.cos(elev)).normalize();
+    growBranch(topPoint, d, rand(1.8, 3.0), 0.3, 0, 4, 0.2);
+  }
+  
+  // === COPA FRONDOSA (sin hueco) ===
+  leafClusters.push({pos: topPoint.clone().add(new THREE.Vector3(0, 0.8, 0)), radius: 1.8, delay: 0.3});
+  
+  leafClusters.forEach(cluster => {
+    const r = cluster.radius;
+    const steps = Math.ceil(r/(unit*0.6));
+    let clusterLeaves = 0;
+    const maxLeaves = Math.floor(rand(100, 180));
+    
+    for (let lx=-steps; lx<=steps; lx++){
+      for (let ly=-Math.ceil(steps*0.9); ly<=Math.ceil(steps*1.0); ly++){
+        for (let lz=-steps; lz<=steps; lz++){
+          if (clusterLeaves >= maxLeaves) break;
+          const vx = cluster.pos.x + lx*unit*0.65;
+          const vy = cluster.pos.y + ly*unit*0.65;
+          const vz = cluster.pos.z + lz*unit*0.65;
+          const dx = (vx-cluster.pos.x)/r;
+          const dy = (vy-cluster.pos.y)/(r*0.8);
+          const dz = (vz-cluster.pos.z)/r;
+          const d = Math.sqrt(dx*dx + dy*dy + dz*dz);
+          const noise = (Math.sin(vx*7)+Math.cos(vy*8)+Math.sin(vz*7))*0.1;
+          if (d < (0.82+noise) && Math.random()<season.leafChance){
+            addLeaf(vx, vy, vz, rand(0.7, 1.3), Math.floor(Math.random()*season.canopy.length), cluster.delay + d*0.15);
+            clusterLeaves++;
+          }
+        }
+      }
+    }
+    
+    // Nieve en invierno (sin flores)
+    if (currentSeason==='winter'){
+      for (let s=0; s<18; s++){
+        const angle = Math.random()*Math.PI*2;
+        const dist = Math.random()*r*0.5;
+        addDecor(
+          cluster.pos.x + Math.cos(angle)*dist,
+          cluster.pos.y + r*0.4 + Math.random()*0.4,
+          cluster.pos.z + Math.sin(angle)*dist,
+          rand(0.2,0.45), '#ffffff', cluster.delay, 'snow'
+        );
+      }
+    }
+  });
+
+  // === RAÍCES + MARCAS ===
+  const nRoots = Math.floor(rand(5, 8));
+  for (let r=0; r<nRoots; r++){
+    const angle = (r/nRoots)*Math.PI*2 + rand(-0.3,0.3);
+    const len = rand(1.0, 1.8);
+    const dir = new THREE.Vector3(Math.cos(angle), 0.08, Math.sin(angle)).normalize();
+    let pos = new THREE.Vector3(0, groundH+unit*0.5, 0);
+    const steps = Math.ceil(len/(unit*0.7));
+    
+    for (let i=0; i<steps; i++){
+      pos.add(dir.clone().multiplyScalar(unit*0.65));
+      pos.y -= 0.008;
+      const thick = 0.3 * (1 - i/steps);
+      addWood(pos.x, pos.y, pos.z, thick, unit*0.75, thick, new THREE.Quaternion(), i*0.02);
+      if (i > 1) {
+        addMark(pos.x + rand(-0.1,0.1), groundH*0.25, pos.z + rand(-0.1,0.1), thick*1.8, thick*1.8, season.markColor, 0);
+      }
+    }
+  }
+
+  // === HOJAS CAÍDAS ===
+  const fallenCount = currentSeason==='winter'? 25 : (currentSeason==='autumn'? 80 : 40);
+  for (let f=0; f<fallenCount; f++){
+    const angle = Math.random()*Math.PI*2;
+    const dist = rand(0, 6.0);
+    const x = Math.cos(angle)*dist;
+    const z = Math.sin(angle)*dist;
+    const y = groundH + unit*0.4;
+    const c = currentSeason==='winter' ? '#ffffff' : (currentSeason==='autumn' ? season.canopy[Math.floor(rand(0,3))] : season.fallingLeafColor);
+    addFallen(x, y, z, rand(0.25,0.42), c, rand(0.5,1.2), Math.random()*Math.PI*2);
+  }
+  
+  // Brotes
+  for (let o=0; o<15; o++){
+    const angle = Math.random()*Math.PI*2;
+    const dist = rand(1.5, 5.0);
+    const x = Math.cos(angle)*dist;
+    const z = Math.sin(angle)*dist;
+    addDecor(x, groundH+unit*0.35, z, rand(0.08,0.18), season.grass[0], 0, 'sprout');
+  }
+}
+
+function buildScene(qr){
+  [groundInst, qrBaseInst, woodInst, leafInst, decorInst, grassInst, fallenInst, markInst].forEach(m=>{ if(m) scene.remove(m); });
+  const season = SEASONS[currentSeason];
+  const n = qr.getModuleCount();
+  const cx = (n-1)/2;
+  
+  scene.background = new THREE.Color(season.bg);
+  scene.fog.color = new THREE.Color(season.bg);
+  
+  // Base QR sólida
+  const qrWorldSize = n * unit;
+  const baseGeo = new THREE.BoxGeometry(qrWorldSize + unit*3, groundH*0.6, qrWorldSize + unit*3);
+  const baseMat = new THREE.MeshStandardMaterial({ color: season.qrBase, roughness:0.95 });
+  qrBaseInst = new THREE.Mesh(baseGeo, baseMat);
+  qrBaseInst.position.y = groundH * 0.25;
+  qrBaseInst.receiveShadow = true;
+  scene.add(qrBaseInst);
+  
+  // Módulos QR
+  const groundGeo = new THREE.BoxGeometry(unit*0.9, groundH*1.15, unit*0.9);
+  const groundMat = new THREE.MeshStandardMaterial({ roughness:0.9 });
+  groundInst = new THREE.InstancedMesh(groundGeo, groundMat, n*n);
+  groundInst.receiveShadow = true;
+  const dummy = new THREE.Object3D(), color = new THREE.Color();
+  let gi=0;
+  for (let row=0; row<n; row++){
+    for (let col=0; col<n; col++){
+      const dark = qr.isDark(row,col);
+      const x=(col-cx)*unit, z=(row-cx)*unit;
+      dummy.position.set(x, groundH/2, z);
+      dummy.scale.set(1,1,1); dummy.rotation.set(0,0,0); dummy.updateMatrix();
+      groundInst.setMatrixAt(gi, dummy.matrix);
+      color.set(dark? season.qrDark : season.qrBase);
+      const v=rand(-0.03,0.03);
+      color.r+=v; color.g+=v; color.b+=v;
+      groundInst.setColorAt(gi, color);
+      gi++;
+    }
+  }
+  groundInst.instanceMatrix.needsUpdate = true;
+  if (groundInst.instanceColor) groundInst.instanceColor.needsUpdate = true;
+  scene.add(groundInst);
+  
+  generateTree(season);
+  
+  // === GRAMA EN CELDAS NEGRAS DEL QR ===
+  for (let row=0; row<n; row++){
+    for (let col=0; col<n; col++){
+      if (qr.isDark(row,col)){
+        const x=(col-cx)*unit, z=(row-cx)*unit;
+        const nGrass = Math.floor(rand(2,5));
+        for (let g=0; g<nGrass; g++){
+          const gx = x + rand(-unit*0.25, unit*0.25);
+          const gz = z + rand(-unit*0.25, unit*0.25);
+          const h = rand(0.12, 0.32);
+          const colorIdx = Math.floor(Math.random()*season.grass.length);
+          const baseY = groundH + unit*0.15;
+          
+          // Tallo delgado
+          grassPieces.push({
+            x: gx, y: baseY + h*0.25, z: gz,
+            sx: unit*0.1, sy: h*0.45, sz: unit*0.1,
+            rot: new THREE.Quaternion(), colorIdx, delay: 0
+          });
+          
+          // Hoja de grama (plana y rotada)
+          const bladeRot = new THREE.Quaternion().setFromEuler(new THREE.Euler(rand(-0.5,0.5), rand(-0.8,0.8), 0));
+          grassPieces.push({
+            x: gx, y: baseY + h*0.65, z: gz,
+            sx: unit*0.22, sy: unit*0.06, sz: unit*0.32,
+            rot: bladeRot, colorIdx, delay: 0
+          });
+          
+          // Segunda hoja ocasional
+          if (Math.random() > 0.5) {
+            const b2 = new THREE.Quaternion().setFromEuler(new THREE.Euler(rand(-0.4,0.4), rand(-1.0,1.0), rand(-0.3,0.3)));
+            grassPieces.push({
+              x: gx + rand(-0.05,0.05), y: baseY + h*0.55, z: gz + rand(-0.05,0.05),
+              sx: unit*0.18, sy: unit*0.05, sz: unit*0.25,
+              rot: b2, colorIdx, delay: 0
+            });
+          }
+        }
+      }
+    }
+  }
+  
+  // Madera
+  const woodGeo = new THREE.BoxGeometry(1,1,1);
+  const woodMat = new THREE.MeshStandardMaterial({ color: season.trunk, roughness:0.9, metalness:0.05 });
+  woodInst = new THREE.InstancedMesh(woodGeo, woodMat, Math.max(woodPieces.length,1));
+  woodInst.castShadow = true; woodInst.receiveShadow = true;
+  scene.add(woodInst);
+  
+  // Hojas
+  const leafGeo = new THREE.BoxGeometry(1,1,1);
+  const leafMat = new THREE.MeshStandardMaterial({ roughness:0.65, metalness:0.05 });
+  leafInst = new THREE.InstancedMesh(leafGeo, leafMat, Math.max(leafPieces.length,1));
+  leafInst.castShadow = true; leafInst.receiveShadow = true;
+  scene.add(leafInst);
+  
+  // Decoraciones
+  const decorGeo = new THREE.BoxGeometry(1,1,1);
+  const decorMat = new THREE.MeshStandardMaterial({ roughness:0.4, metalness:0.1 });
+  decorInst = new THREE.InstancedMesh(decorGeo, decorMat, Math.max(decorPieces.length,1));
+  decorInst.castShadow = true;
+  scene.add(decorInst);
+  
+  // Grama
+  const grassGeo = new THREE.BoxGeometry(1,1,1);
+  const grassMat = new THREE.MeshStandardMaterial({ roughness:0.85 });
+  grassInst = new THREE.InstancedMesh(grassGeo, grassMat, Math.max(grassPieces.length,1));
+  grassInst.castShadow = true; grassInst.receiveShadow = true;
+  scene.add(grassInst);
+  
+  // Hojas caídas
+  const fallenGeo = new THREE.BoxGeometry(1, unit*0.12, 1);
+  const fallenMat = new THREE.MeshStandardMaterial({ roughness:0.8, metalness:0.0 });
+  fallenInst = new THREE.InstancedMesh(fallenGeo, fallenMat, Math.max(fallenPieces.length,1));
+  fallenInst.castShadow = true; fallenInst.receiveShadow = true;
+  scene.add(fallenInst);
+  
+  // Marcas
+  const markGeo = new THREE.BoxGeometry(1, unit*0.06, 1);
+  const markMat = new THREE.MeshStandardMaterial({ roughness:1.0, transparent:true, opacity:0.8 });
+  markInst = new THREE.InstancedMesh(markGeo, markMat, Math.max(markPieces.length,1));
+  markInst.receiveShadow = true;
+  scene.add(markInst);
+  
+  createParticles(season);
+  applyGrowth(growth, season, true);
+}
+
+function applyGrowth(g, season, immediate=false){
+  const dummy = new THREE.Object3D();
+  const color = new THREE.Color();
+  const t = easeInOutCubic(g);
+  const popDur = 2.2;
+  
+  // Madera
+  woodPieces.forEach((c,i)=>{
+    let lt=1;
+    if (!immediate && g>0.01){
+      lt = Math.max(0, Math.min(1, (animTime - c.delay)/popDur));
+      lt = easeOutElastic(lt);
+    }
+    const sc = t*lt;
+    const y = groundH + (c.y-groundH)*t;
+    dummy.position.set(c.x, y, c.z);
+    dummy.scale.set(c.sx*sc, c.sy*sc, c.sz*sc);
+    dummy.quaternion.copy(c.rot);
+    dummy.updateMatrix();
+    woodInst.setMatrixAt(i, dummy.matrix);
+  });
+  woodInst.count = woodPieces.length;
+  woodInst.instanceMatrix.needsUpdate = true;
+  
+  // Hojas
+  leafPieces.forEach((c,i)=>{
+    let lt=1;
+    if (!immediate && g>0.01){
+      lt = Math.max(0, Math.min(1, (animTime - c.delay)/popDur));
+      lt = easeOutElastic(lt);
+    }
+    const sc = t*c.scale*lt;
+    const y = groundH + (c.y-groundH)*t;
+    let idleY=0, idleRotX=0, idleRotZ=0;
+    if (g>0.85 && currentSeason!=='winter'){
+      const w = 0.035 + Math.sin(animTime*0.5)*0.012;
+      idleY = Math.sin(animTime*1.5+c.phase)*0.035*(c.y-groundH);
+      idleRotX = Math.sin(animTime*0.95+c.phase)*w;
+      idleRotZ = Math.cos(animTime*0.7+c.phase)*w;
+    }
+    dummy.position.set(c.x, y+idleY, c.z);
+    dummy.scale.set(sc, sc, sc);
+    dummy.rotation.set(idleRotX, 0, idleRotZ);
+    dummy.updateMatrix();
+    leafInst.setMatrixAt(i, dummy.matrix);
+    color.set(season.canopy[c.colorIdx]);
+    leafInst.setColorAt(i, color);
+  });
+  leafInst.count = leafPieces.length;
+  leafInst.instanceMatrix.needsUpdate = true;
+  if (leafInst.instanceColor) leafInst.instanceColor.needsUpdate = true;
+  
+  // Decoraciones
+  decorPieces.forEach((c,i)=>{
+    let lt=1;
+    if (!immediate && g>0.01){
+      lt = Math.max(0, Math.min(1, (animTime - c.delay)/popDur));
+      lt = easeOutElastic(lt);
+    }
+    const sc = t*c.scale*lt;
+    const y = groundH + (c.y-groundH)*t;
+    dummy.position.set(c.x, y, c.z);
+    dummy.scale.set(sc, sc, sc);
+    dummy.rotation.set(0,0,0);
+    dummy.updateMatrix();
+    decorInst.setMatrixAt(i, dummy.matrix);
+    color.set(c.color);
+    decorInst.setColorAt(i, color);
+  });
+  decorInst.count = decorPieces.length;
+  decorInst.instanceMatrix.needsUpdate = true;
+  if (decorInst.instanceColor) decorInst.instanceColor.needsUpdate = true;
+  
+  // Grama — SIEMPRE VISIBLE, con viento
+  grassPieces.forEach((c,i)=>{
+    const sc = 1;
+    const y = c.y;
+    let windX=0, windZ=0;
+    if (g>0.5) {
+      const w = Math.sin(animTime*1.2 + c.x*2.5 + c.z*1.5)*0.04 * g;
+      windX = w;
+      windZ = w*0.6;
+    }
+    dummy.position.set(c.x, y, c.z);
+    dummy.scale.set(c.sx*sc, c.sy*sc, c.sz*sc);
+    dummy.rotation.set(windX, 0, windZ);
+    if (c.rot) dummy.quaternion.multiply(c.rot);
+    dummy.updateMatrix();
+    grassInst.setMatrixAt(i, dummy.matrix);
+    color.set(season.grass[c.colorIdx]);
+    grassInst.setColorAt(i, color);
+  });
+  grassInst.count = grassPieces.length;
+  grassInst.instanceMatrix.needsUpdate = true;
+  if (grassInst.instanceColor) grassInst.instanceColor.needsUpdate = true;
+  
+  // Hojas caídas
+  fallenPieces.forEach((c,i)=>{
+    const sc = c.scale;
+    const y = c.y;
+    dummy.position.set(c.x, y, c.z);
+    dummy.scale.set(sc, unit*0.1*sc, sc);
+    dummy.rotation.set(0, c.rotY + Math.sin(animTime*0.25+c.phase)*0.08, 0);
+    dummy.updateMatrix();
+    fallenInst.setMatrixAt(i, dummy.matrix);
+    color.set(c.color);
+    fallenInst.setColorAt(i, color);
+  });
+  fallenInst.count = fallenPieces.length;
+  fallenInst.instanceMatrix.needsUpdate = true;
+  if (fallenInst.instanceColor) fallenInst.instanceColor.needsUpdate = true;
+  
+  // Marcas
+  markPieces.forEach((c,i)=>{
+    dummy.position.set(c.x, c.y, c.z);
+    dummy.scale.set(c.sx, 1, c.sz);
+    dummy.rotation.set(0,0,0);
+    dummy.updateMatrix();
+    markInst.setMatrixAt(i, dummy.matrix);
+    color.set(c.color);
+    markInst.setColorAt(i, color);
+  });
+  markInst.count = markPieces.length;
+  markInst.instanceMatrix.needsUpdate = true;
+  if (markInst.instanceColor) markInst.instanceColor.needsUpdate = true;
+}
+
+/* ---------- QR plano ---------- */
+function drawFlatQr(qr){
+  const canvas = document.getElementById('flatQr');
+  const ctx = canvas.getContext('2d');
+  const season = SEASONS[currentSeason];
+  const n = qr.getModuleCount();
+  const quiet = 2;
+  const cell = canvas.width/(n+quiet*2);
+  ctx.fillStyle = season.qrBase;
+  ctx.fillRect(0,0,canvas.width,canvas.height);
+  ctx.fillStyle = season.qrDark;
+  for (let row=0; row<n; row++){
+    for (let col=0; col<n; col++){
+      if (qr.isDark(row,col)){
+        const pad=cell*0.06;
+        ctx.fillRect((col+quiet)*cell+pad, (row+quiet)*cell+pad, cell-pad*2, cell-pad*2);
+      }
+    }
+  }
+}
+
+function generate(){
+  const text = document.getElementById('urlInput').value.trim() || 'https://claude.ai';
+  let qr;
+  try {
+    qr = qrcode(0, 'M');
+    qr.addData(text);
+    qr.make();
+  } catch(err){ alert('URL muy larga o inválida para QR.'); return; }
+  animTime = 0;
+  buildScene(qr);
+  drawFlatQr(qr);
+}
+
+document.getElementById('downloadTreeBtn').addEventListener('click', () => {
+  renderer.render(scene, camera);
+  const link = document.createElement('a');
+  link.download = 'arbol-de-bloques.png';
+  link.href = renderer.domElement.toDataURL('image/png');
+  link.click();
+});
+document.getElementById('downloadFlatBtn').addEventListener('click', () => {
+  const canvas = document.getElementById('flatQr');
+  const link = document.createElement('a');
+  link.download = 'codigo-qr.png';
+  link.href = canvas.toDataURL('image/png');
+  link.click();
+});
+
+let lastTime = 0;
+function animate(time){
+  requestAnimationFrame(animate);
+  const dt = Math.min((time-lastTime)/1000, 0.1);
+  lastTime = time;
+  animTime += dt;
+  
+  if (Math.abs(growth-growthTarget)>0.001){
+    growth += (growthTarget-growth)*0.05;
+    applyGrowth(growth, SEASONS[currentSeason]);
+  } else if (growth!==growthTarget){
+    growth = growthTarget;
+    applyGrowth(growth, SEASONS[currentSeason]);
+  } else if (growthTarget===1){
+    applyGrowth(growth, SEASONS[currentSeason]);
+  }
+  
+  updateParticles(SEASONS[currentSeason]);
+  updateCamera();
+  renderer.render(scene, camera);
+}
+
+resize();
+generate();
+animate(0);
+</script>
+</body>
+</html>
