@@ -1,5 +1,7 @@
 # 🌳 qrTree — Árbol de Bloques
 
+> **[▶ Ver en vivo](https://andregil003.github.io/qrTree/)** — abre el generador directo en tu navegador.
+
 Generador de **QR 3D procedural** que convierte cualquier enlace en un árbol voxelizado que crece sobre el suelo de tu código QR real.
 
 ## ¿Qué es?
