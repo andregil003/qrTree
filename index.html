@@ -4,10 +4,17 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Árbol de Bloques — Generador de QR 3D</title>
+<meta name="description" content="Genera un QR 3D con un árbol procedural que crece sobre tu código. 4 temporadas, descarga PNG y comparte tu árbol con un enlace.">
+<meta property="og:title" content="Árbol de Bloques — Generador de QR 3D">
+<meta property="og:description" content="Convierte cualquier enlace en un árbol voxelizado que crece sobre tu código QR real. 4 temporadas y árboles únicos con semilla.">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://andregil003.github.io/qrTree/">
+<meta name="twitter:card" content="summary">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🌳</text></svg>">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,600;1,9..144,500&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
-<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js" integrity="sha384-CI3ELBVUz9XQO+97x6nwMDPosPR5XvsxW2ua7N1Xeygeh1IxtgqtCkGfQY9WWdHu" crossorigin="anonymous"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js" integrity="sha384-mZT2gIty7ZDdOGkxfP6joZcYdMW1Jvj9dRlfpTmaJAKKXTqzygtB22k7FLe+KZC1" crossorigin="anonymous"></script>
 <style>
   :root{
     --bg:#f6f1e7; --ink:#2b2318; --ink-soft:#6b5f4f;
@@ -38,6 +45,7 @@
   .divider{ height:1px; background:var(--line); }
   .ghost-btn{ width:100%; padding:11px; border-radius:12px; border:1px solid var(--line); background:#fff; color:var(--ink); font-weight:500; font-size:13px; cursor:pointer; transition:all .2s; }
   .ghost-btn:hover{ background:#faf8f3; }
+  .error-msg{ font-size:12.5px; color:#b3261e; background:#fdecea; border:1px solid #f5c6c0; border-radius:10px; padding:9px 12px; margin:0; line-height:1.4; }
   .flatqr-wrap{ display:flex; flex-direction:column; align-items:center; gap:10px; }
   .flatqr-wrap canvas{ border-radius:8px; border:1px solid var(--line); }
   .flatqr-note{ font-size:12px; color:var(--ink-soft); text-align:center; line-height:1.4; }
@@ -66,7 +74,7 @@
   <div class="panel">
     <div class="field">
       <label for="urlInput">Tu enlace</label>
-      <input type="text" id="urlInput" value="https://https://github.com/andregil003" placeholder="https://tuenlace.com" />
+      <input type="text" id="urlInput" value="https://github.com/andregil003" placeholder="https://tuenlace.com" />
     </div>
 
     <div class="field">
@@ -75,6 +83,10 @@
     </div>
 
     <button class="generate-btn" id="generateBtn">Generar árbol</button>
+
+    <button class="ghost-btn" id="randomBtn">🎲 Nuevo árbol aleatorio</button>
+    <button class="ghost-btn" id="copyLinkBtn">🔗 Copiar enlace</button>
+    <p id="errorMsg" class="error-msg" role="alert" hidden></p>
 
     <div class="divider"></div>
 
@@ -90,7 +102,7 @@
   </div>
 
   <div class="stage" id="stage">
-    <div class="canvas-wrap" id="canvasWrap">
+    <div class="canvas-wrap" id="canvasWrap" role="img" aria-label="Escena 3D del árbol de bloques sobre tu código QR">
       <div class="badge" id="modeBadge">🌳 Árbol</div>
       <div class="hint">Arrastra para girar · rueda para acercar</div>
     </div>
@@ -147,25 +159,37 @@ const SEASONS = {
 };
 let currentSeason = 'summer';
 
+/* ---------- Semilla / PRNG reproducible ---------- */
+function mulberry32(a){ return function(){ a|=0; a=a+0x6D2B79F5|0; let t=Math.imul(a^a>>>15,1|a); t=t+Math.imul(t^t>>>7,61|t)^t; return ((t^t>>>14)>>>0)/4294967296; }; }
+let seed = (Date.now() ^ (Math.random()*0xffffffff)) >>> 0;
+let rng = mulberry32(seed);
+function newSeed(){ seed = (Date.now() ^ (Math.random()*0xffffffff)) >>> 0; rng = mulberry32(seed); }
+
 const seasonPicker = document.getElementById('seasonPicker');
+function setSeason(key, skipGenerate){
+  currentSeason = key;
+  document.querySelectorAll('.season-btn').forEach(b => {
+    const active = b.dataset.season === key;
+    b.classList.toggle('active', active);
+    b.setAttribute('aria-pressed', String(active));
+  });
+  if (!skipGenerate) generate();
+}
 Object.entries(SEASONS).forEach(([key, s]) => {
   const btn = document.createElement('button');
   btn.type = 'button';
+  btn.dataset.season = key;
   btn.className = 'season-btn' + (key === currentSeason ? ' active' : '');
+  btn.setAttribute('aria-pressed', String(key === currentSeason));
   btn.innerHTML = `<span class="dot" style="background:${s.dot}"></span>${s.label}`;
-  btn.addEventListener('click', () => {
-    currentSeason = key;
-    document.querySelectorAll('.season-btn').forEach(b => b.classList.remove('active'));
-    btn.classList.add('active');
-    generate();
-  });
+  btn.addEventListener('click', () => setSeason(key));
   seasonPicker.appendChild(btn);
 });
 document.getElementById('urlInput').addEventListener('keydown', e => { if (e.key === 'Enter') generate(); });
 document.getElementById('generateBtn').addEventListener('click', generate);
 document.getElementById('visitLinkBtn').addEventListener('click', () => {
   const v = document.getElementById('urlInput').value.trim();
-  if (v) window.open(v.match(/^https?:\/\//) ? v : 'https://' + v, '_blank');
+  if (v) window.open(v.match(/^https?:\/\//) ? v : 'https://' + v, '_blank', 'noopener');
 });
 
 /* ---------- Three.js ---------- */
@@ -176,7 +200,7 @@ scene.fog = new THREE.Fog(SEASONS[currentSeason].bg, 18, 45);
 
 const frustum = 11;
 let camera = new THREE.OrthographicCamera(-frustum, frustum, frustum, -frustum, 0.1, 100);
-const renderer = new THREE.WebGLRenderer({ antialias:true, preserveDrawingBuffer:true, alpha:true });
+const renderer = new THREE.WebGLRenderer({ antialias:true, alpha:true, powerPreference:'high-performance' });
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
@@ -220,9 +244,32 @@ function updateCamera(){
   );
   camera.lookAt(target);
 }
-renderer.domElement.addEventListener('pointerdown', e => { dragging = true; lastX = e.clientX; lastY = e.clientY; });
-window.addEventListener('pointerup', () => dragging = false);
+const pointers = new Map();
+let lastPinchDist = 0;
+renderer.domElement.addEventListener('pointerdown', e => {
+  pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+  if (pointers.size === 1){ dragging = true; lastX = e.clientX; lastY = e.clientY; }
+});
+window.addEventListener('pointerup', e => {
+  pointers.delete(e.pointerId);
+  if (pointers.size === 0) dragging = false;
+  lastPinchDist = 0;
+});
 window.addEventListener('pointermove', e => {
+  if (pointers.has(e.pointerId)) pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+  if (pointers.size >= 2){
+    const pts = [...pointers.values()];
+    const d = Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y);
+    if (lastPinchDist > 0){
+      const s = Math.min(Math.max(camera.top / (d / lastPinchDist), 4), 24);
+      const a = canvasWrap.clientWidth / (canvasWrap.clientHeight || 520);
+      camera.left = -s*a; camera.right = s*a; camera.top = s; camera.bottom = -s;
+      camera.updateProjectionMatrix();
+    }
+    lastPinchDist = d;
+    return;
+  }
+  lastPinchDist = 0;
   if (!dragging) return;
   theta -= (e.clientX - lastX) * 0.006;
   phi = Math.min(Math.max(phi - (e.clientY - lastY) * 0.006, 0.25), 1.4);
@@ -252,6 +299,7 @@ const modeBadge = document.getElementById('modeBadge');
 toggleBtn.addEventListener('click', () => {
   growthTarget = growthTarget === 1 ? 0 : 1;
   toggleBtn.textContent = growthTarget === 1 ? 'Aplanar a QR' : 'Hacer crecer el árbol';
+  toggleBtn.setAttribute('aria-pressed', String(growthTarget === 0));
   modeBadge.textContent = growthTarget === 1 ? '🌳 Árbol' : '▦ QR';
 });
 
@@ -297,7 +345,7 @@ const unit = 0.24, groundH = 0.12;
 
 function easeOutElastic(x){ const c4=(2*Math.PI)/3; return x===0?0:x===1?1:Math.pow(2,-10*x)*Math.sin((x*10-0.75)*c4)+1; }
 function easeInOutCubic(x){ return x<0.5?4*x*x*x:1-Math.pow(-2*x+2,3)/2; }
-function rand(min, max){ return min + Math.random()*(max-min); }
+function rand(min, max){ return min + rng()*(max-min); }
 
 const _v = new THREE.Vector3();
 function quatFromDir(dir, up=new THREE.Vector3(0,1,0)){
@@ -320,13 +368,13 @@ function generateTree(season){
     woodPieces.push({x,y,z, sx,sy,sz, rot, delay});
   }
   function addLeaf(x,y,z, scale, colorIdx, delay){
-    leafPieces.push({x,y,z, scale, colorIdx, delay, phase: Math.random()*Math.PI*2});
+    leafPieces.push({x,y,z, scale, colorIdx, delay, phase: rng()*Math.PI*2});
   }
   function addDecor(x,y,z, scale, color, delay){
     decorPieces.push({x,y,z, scale, color, delay});
   }
   function addFallen(x,y,z, scale, color, delay, rotY){
-    fallenPieces.push({x,y,z, scale, color, delay, rotY, phase: Math.random()*Math.PI*2});
+    fallenPieces.push({x,y,z, scale, color, delay, rotY, phase: rng()*Math.PI*2});
   }
   function addMark(x,y,z, sx,sz, color, delay){
     markPieces.push({x,y,z, sx, sz, color, delay});
@@ -454,8 +502,8 @@ function generateTree(season){
           const dz = (vz-cluster.pos.z)/r;
           const d = Math.sqrt(dx*dx + dy*dy + dz*dz);
           const noise = (Math.sin(vx*7)+Math.cos(vy*8)+Math.sin(vz*7))*0.1;
-          if (d < (0.82+noise) && Math.random()<season.leafChance){
-            addLeaf(vx, vy, vz, rand(0.7, 1.3), Math.floor(Math.random()*season.canopy.length), cluster.delay + d*0.15);
+          if (d < (0.82+noise) && rng()<season.leafChance){
+            addLeaf(vx, vy, vz, rand(0.7, 1.3), Math.floor(rng()*season.canopy.length), cluster.delay + d*0.15);
             clusterLeaves++;
           }
         }
@@ -465,11 +513,11 @@ function generateTree(season){
     // Nieve en invierno (sin flores)
     if (currentSeason==='winter'){
       for (let s=0; s<18; s++){
-        const angle = Math.random()*Math.PI*2;
-        const dist = Math.random()*r*0.5;
+        const angle = rng()*Math.PI*2;
+        const dist = rng()*r*0.5;
         addDecor(
           cluster.pos.x + Math.cos(angle)*dist,
-          cluster.pos.y + r*0.4 + Math.random()*0.4,
+          cluster.pos.y + r*0.4 + rng()*0.4,
           cluster.pos.z + Math.sin(angle)*dist,
           rand(0.2,0.45), '#ffffff', cluster.delay, 'snow'
         );
@@ -500,23 +548,30 @@ function generateTree(season){
   // === HOJAS CAÍDAS ===
   const fallenCount = currentSeason==='winter'? 25 : (currentSeason==='autumn'? 80 : 40);
   for (let f=0; f<fallenCount; f++){
-    const angle = Math.random()*Math.PI*2;
+    const angle = rng()*Math.PI*2;
     const dist = rand(0, 6.0);
     const x = Math.cos(angle)*dist;
     const z = Math.sin(angle)*dist;
     const y = groundH + unit*0.4;
     const c = currentSeason==='winter' ? '#ffffff' : (currentSeason==='autumn' ? season.canopy[Math.floor(rand(0,3))] : season.fallingLeafColor);
-    addFallen(x, y, z, rand(0.25,0.42), c, rand(0.5,1.2), Math.random()*Math.PI*2);
+    addFallen(x, y, z, rand(0.25,0.42), c, rand(0.5,1.2), rng()*Math.PI*2);
   }
   
   // Brotes
   for (let o=0; o<15; o++){
-    const angle = Math.random()*Math.PI*2;
+    const angle = rng()*Math.PI*2;
     const dist = rand(1.5, 5.0);
     const x = Math.cos(angle)*dist;
     const z = Math.sin(angle)*dist;
     addDecor(x, groundH+unit*0.35, z, rand(0.08,0.18), season.grass[0], 0, 'sprout');
   }
+}
+
+function setInstanceColors(inst, pieces, getColor){
+  if (!inst || !pieces.length) return;
+  const color = new THREE.Color();
+  pieces.forEach((c,i) => { color.set(getColor(c)); inst.setColorAt(i, color); });
+  if (inst.instanceColor) inst.instanceColor.needsUpdate = true;
 }
 
 function buildScene(qr){
@@ -574,7 +629,7 @@ function buildScene(qr){
           const gx = x + rand(-unit*0.25, unit*0.25);
           const gz = z + rand(-unit*0.25, unit*0.25);
           const h = rand(0.12, 0.32);
-          const colorIdx = Math.floor(Math.random()*season.grass.length);
+          const colorIdx = Math.floor(rng()*season.grass.length);
           const baseY = groundH + unit*0.15;
           
           // Tallo delgado
@@ -593,7 +648,7 @@ function buildScene(qr){
           });
           
           // Segunda hoja ocasional
-          if (Math.random() > 0.5) {
+          if (rng() > 0.5) {
             const b2 = new THREE.Quaternion().setFromEuler(new THREE.Euler(rand(-0.4,0.4), rand(-1.0,1.0), rand(-0.3,0.3)));
             grassPieces.push({
               x: gx + rand(-0.05,0.05), y: baseY + h*0.55, z: gz + rand(-0.05,0.05),
@@ -619,6 +674,7 @@ function buildScene(qr){
   leafInst = new THREE.InstancedMesh(leafGeo, leafMat, Math.max(leafPieces.length,1));
   leafInst.castShadow = true; leafInst.receiveShadow = true;
   scene.add(leafInst);
+  setInstanceColors(leafInst, leafPieces, c => season.canopy[c.colorIdx]);
   
   // Decoraciones
   const decorGeo = new THREE.BoxGeometry(1,1,1);
@@ -626,6 +682,7 @@ function buildScene(qr){
   decorInst = new THREE.InstancedMesh(decorGeo, decorMat, Math.max(decorPieces.length,1));
   decorInst.castShadow = true;
   scene.add(decorInst);
+  setInstanceColors(decorInst, decorPieces, c => c.color);
   
   // Grama
   const grassGeo = new THREE.BoxGeometry(1,1,1);
@@ -633,6 +690,7 @@ function buildScene(qr){
   grassInst = new THREE.InstancedMesh(grassGeo, grassMat, Math.max(grassPieces.length,1));
   grassInst.castShadow = true; grassInst.receiveShadow = true;
   scene.add(grassInst);
+  setInstanceColors(grassInst, grassPieces, c => season.grass[c.colorIdx]);
   
   // Hojas caídas
   const fallenGeo = new THREE.BoxGeometry(1, unit*0.12, 1);
@@ -640,6 +698,7 @@ function buildScene(qr){
   fallenInst = new THREE.InstancedMesh(fallenGeo, fallenMat, Math.max(fallenPieces.length,1));
   fallenInst.castShadow = true; fallenInst.receiveShadow = true;
   scene.add(fallenInst);
+  setInstanceColors(fallenInst, fallenPieces, c => c.color);
   
   // Marcas
   const markGeo = new THREE.BoxGeometry(1, unit*0.06, 1);
@@ -647,36 +706,68 @@ function buildScene(qr){
   markInst = new THREE.InstancedMesh(markGeo, markMat, Math.max(markPieces.length,1));
   markInst.receiveShadow = true;
   scene.add(markInst);
+  setInstanceColors(markInst, markPieces, c => c.color);
   
   createParticles(season);
   applyGrowth(growth, season, true);
 }
 
+let lastStaticGrowth = -1;
 function applyGrowth(g, season, immediate=false){
   const dummy = new THREE.Object3D();
-  const color = new THREE.Color();
   const t = easeInOutCubic(g);
   const popDur = 2.2;
+  const staticChanged = immediate || Math.abs(g - lastStaticGrowth) > 0.0005;
   
-  // Madera
-  woodPieces.forEach((c,i)=>{
-    let lt=1;
-    if (!immediate && g>0.01){
-      lt = Math.max(0, Math.min(1, (animTime - c.delay)/popDur));
-      lt = easeOutElastic(lt);
-    }
-    const sc = t*lt;
-    const y = groundH + (c.y-groundH)*t;
-    dummy.position.set(c.x, y, c.z);
-    dummy.scale.set(c.sx*sc, c.sy*sc, c.sz*sc);
-    dummy.quaternion.copy(c.rot);
-    dummy.updateMatrix();
-    woodInst.setMatrixAt(i, dummy.matrix);
-  });
-  woodInst.count = woodPieces.length;
-  woodInst.instanceMatrix.needsUpdate = true;
+  // Madera / decoraciones / marcas — SOLO cuando cambia el crecimiento
+  if (staticChanged){
+    woodPieces.forEach((c,i)=>{
+      let lt=1;
+      if (!immediate && g>0.01){
+        lt = Math.max(0, Math.min(1, (animTime - c.delay)/popDur));
+        lt = easeOutElastic(lt);
+      }
+      const sc = t*lt;
+      const y = groundH + (c.y-groundH)*t;
+      dummy.position.set(c.x, y, c.z);
+      dummy.scale.set(c.sx*sc, c.sy*sc, c.sz*sc);
+      dummy.quaternion.copy(c.rot);
+      dummy.updateMatrix();
+      woodInst.setMatrixAt(i, dummy.matrix);
+    });
+    woodInst.count = woodPieces.length;
+    woodInst.instanceMatrix.needsUpdate = true;
+    
+    decorPieces.forEach((c,i)=>{
+      let lt=1;
+      if (!immediate && g>0.01){
+        lt = Math.max(0, Math.min(1, (animTime - c.delay)/popDur));
+        lt = easeOutElastic(lt);
+      }
+      const sc = t*c.scale*lt;
+      const y = groundH + (c.y-groundH)*t;
+      dummy.position.set(c.x, y, c.z);
+      dummy.scale.set(sc, sc, sc);
+      dummy.rotation.set(0,0,0);
+      dummy.updateMatrix();
+      decorInst.setMatrixAt(i, dummy.matrix);
+    });
+    decorInst.count = decorPieces.length;
+    decorInst.instanceMatrix.needsUpdate = true;
+    
+    markPieces.forEach((c,i)=>{
+      dummy.position.set(c.x, c.y, c.z);
+      dummy.scale.set(c.sx, 1, c.sz);
+      dummy.rotation.set(0,0,0);
+      dummy.updateMatrix();
+      markInst.setMatrixAt(i, dummy.matrix);
+    });
+    markInst.count = markPieces.length;
+    markInst.instanceMatrix.needsUpdate = true;
+    lastStaticGrowth = g;
+  }
   
-  // Hojas
+  // Hojas — siempre (viento idle)
   leafPieces.forEach((c,i)=>{
     let lt=1;
     if (!immediate && g>0.01){
@@ -697,33 +788,9 @@ function applyGrowth(g, season, immediate=false){
     dummy.rotation.set(idleRotX, 0, idleRotZ);
     dummy.updateMatrix();
     leafInst.setMatrixAt(i, dummy.matrix);
-    color.set(season.canopy[c.colorIdx]);
-    leafInst.setColorAt(i, color);
   });
   leafInst.count = leafPieces.length;
   leafInst.instanceMatrix.needsUpdate = true;
-  if (leafInst.instanceColor) leafInst.instanceColor.needsUpdate = true;
-  
-  // Decoraciones
-  decorPieces.forEach((c,i)=>{
-    let lt=1;
-    if (!immediate && g>0.01){
-      lt = Math.max(0, Math.min(1, (animTime - c.delay)/popDur));
-      lt = easeOutElastic(lt);
-    }
-    const sc = t*c.scale*lt;
-    const y = groundH + (c.y-groundH)*t;
-    dummy.position.set(c.x, y, c.z);
-    dummy.scale.set(sc, sc, sc);
-    dummy.rotation.set(0,0,0);
-    dummy.updateMatrix();
-    decorInst.setMatrixAt(i, dummy.matrix);
-    color.set(c.color);
-    decorInst.setColorAt(i, color);
-  });
-  decorInst.count = decorPieces.length;
-  decorInst.instanceMatrix.needsUpdate = true;
-  if (decorInst.instanceColor) decorInst.instanceColor.needsUpdate = true;
   
   // Grama — SIEMPRE VISIBLE, con viento
   grassPieces.forEach((c,i)=>{
@@ -741,12 +808,9 @@ function applyGrowth(g, season, immediate=false){
     if (c.rot) dummy.quaternion.multiply(c.rot);
     dummy.updateMatrix();
     grassInst.setMatrixAt(i, dummy.matrix);
-    color.set(season.grass[c.colorIdx]);
-    grassInst.setColorAt(i, color);
   });
   grassInst.count = grassPieces.length;
   grassInst.instanceMatrix.needsUpdate = true;
-  if (grassInst.instanceColor) grassInst.instanceColor.needsUpdate = true;
   
   // Hojas caídas
   fallenPieces.forEach((c,i)=>{
@@ -757,26 +821,9 @@ function applyGrowth(g, season, immediate=false){
     dummy.rotation.set(0, c.rotY + Math.sin(animTime*0.25+c.phase)*0.08, 0);
     dummy.updateMatrix();
     fallenInst.setMatrixAt(i, dummy.matrix);
-    color.set(c.color);
-    fallenInst.setColorAt(i, color);
   });
   fallenInst.count = fallenPieces.length;
   fallenInst.instanceMatrix.needsUpdate = true;
-  if (fallenInst.instanceColor) fallenInst.instanceColor.needsUpdate = true;
-  
-  // Marcas
-  markPieces.forEach((c,i)=>{
-    dummy.position.set(c.x, c.y, c.z);
-    dummy.scale.set(c.sx, 1, c.sz);
-    dummy.rotation.set(0,0,0);
-    dummy.updateMatrix();
-    markInst.setMatrixAt(i, dummy.matrix);
-    color.set(c.color);
-    markInst.setColorAt(i, color);
-  });
-  markInst.count = markPieces.length;
-  markInst.instanceMatrix.needsUpdate = true;
-  if (markInst.instanceColor) markInst.instanceColor.needsUpdate = true;
 }
 
 /* ---------- QR plano ---------- */
@@ -807,18 +854,84 @@ function generate(){
     qr = qrcode(0, 'M');
     qr.addData(text);
     qr.make();
-  } catch(err){ alert('URL muy larga o inválida para QR.'); return; }
+  } catch(err){ showError('URL muy larga o inválida para QR.'); return; }
   animTime = 0;
   buildScene(qr);
   drawFlatQr(qr);
+  try {
+    localStorage.setItem('qrtree:url', text);
+    localStorage.setItem('qrtree:season', currentSeason);
+    localStorage.setItem('qrtree:seed', String(seed));
+  } catch(e){}
+  const params = new URLSearchParams();
+  params.set('url', text);
+  params.set('season', currentSeason);
+  params.set('seed', String(seed));
+  history.replaceState(null, '', '?' + params.toString());
 }
 
+function showError(msg){
+  const el = document.getElementById('errorMsg');
+  el.textContent = msg;
+  el.hidden = false;
+  clearTimeout(el._t);
+  el._t = setTimeout(() => { el.hidden = true; }, 4000);
+}
+
+function initFromParams(){
+  const params = new URLSearchParams(location.search);
+  const url = params.get('url');
+  const season = params.get('season');
+  const seedParam = params.get('seed');
+  if (seedParam && /^\d+$/.test(seedParam)) { seed = Number(seedParam) >>> 0; rng = mulberry32(seed); }
+  if (season && SEASONS[season]) {
+    setSeason(season, true);
+  } else {
+    try {
+      const savedSeason = localStorage.getItem('qrtree:season');
+      if (savedSeason && SEASONS[savedSeason]) setSeason(savedSeason, true);
+    } catch(e){}
+  }
+  if (url) {
+    document.getElementById('urlInput').value = url;
+  } else {
+    try {
+      const savedUrl = localStorage.getItem('qrtree:url');
+      if (savedUrl) document.getElementById('urlInput').value = savedUrl;
+    } catch(e){}
+  }
+}
+
+document.getElementById('randomBtn').addEventListener('click', () => { newSeed(); generate(); });
+document.getElementById('copyLinkBtn').addEventListener('click', () => {
+  const text = document.getElementById('urlInput').value.trim() || 'https://claude.ai';
+  const params = new URLSearchParams({ url: text, season: currentSeason, seed: String(seed) });
+  const link = location.origin + location.pathname + '?' + params.toString();
+  const btn = document.getElementById('copyLinkBtn');
+  const old = btn.textContent;
+  const done = () => { btn.textContent = '✅ ¡Enlace copiado!'; setTimeout(() => btn.textContent = old, 2000); };
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(link).then(done).catch(() => showError('No se pudo copiar el enlace.'));
+  } else {
+    const ta = document.createElement('textarea');
+    ta.value = link; document.body.appendChild(ta); ta.select();
+    try { document.execCommand('copy'); done(); }
+    catch(e){ showError('No se pudo copiar el enlace.'); }
+    document.body.removeChild(ta);
+  }
+});
+
 document.getElementById('downloadTreeBtn').addEventListener('click', () => {
+  const w = canvasWrap.clientWidth, h = canvasWrap.clientHeight || 520;
+  const scale = Math.min(4, 2560 / Math.max(w, h));
+  renderer.setSize(Math.round(w*scale), Math.round(h*scale), false);
   renderer.render(scene, camera);
   const link = document.createElement('a');
   link.download = 'arbol-de-bloques.png';
   link.href = renderer.domElement.toDataURL('image/png');
   link.click();
+  renderer.setSize(w, h, false);
+  renderer.render(scene, camera);
 });
 document.getElementById('downloadFlatBtn').addEventListener('click', () => {
   const canvas = document.getElementById('flatQr');
@@ -829,28 +942,37 @@ document.getElementById('downloadFlatBtn').addEventListener('click', () => {
 });
 
 let lastTime = 0;
+const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 function animate(time){
   requestAnimationFrame(animate);
   const dt = Math.min((time-lastTime)/1000, 0.1);
   lastTime = time;
   animTime += dt;
   
-  if (Math.abs(growth-growthTarget)>0.001){
-    growth += (growthTarget-growth)*0.05;
-    applyGrowth(growth, SEASONS[currentSeason]);
-  } else if (growth!==growthTarget){
-    growth = growthTarget;
-    applyGrowth(growth, SEASONS[currentSeason]);
-  } else if (growthTarget===1){
-    applyGrowth(growth, SEASONS[currentSeason]);
+  if (prefersReducedMotion){
+    if (Math.abs(growth-growthTarget)>0.001){
+      growth = growthTarget;
+      applyGrowth(growth, SEASONS[currentSeason], true);
+    }
+  } else {
+    if (Math.abs(growth-growthTarget)>0.001){
+      growth += (growthTarget-growth)*0.05;
+      applyGrowth(growth, SEASONS[currentSeason]);
+    } else if (growth!==growthTarget){
+      growth = growthTarget;
+      applyGrowth(growth, SEASONS[currentSeason]);
+    } else if (growthTarget===1){
+      applyGrowth(growth, SEASONS[currentSeason]);
+    }
+    updateParticles(SEASONS[currentSeason]);
   }
   
-  updateParticles(SEASONS[currentSeason]);
   updateCamera();
   renderer.render(scene, camera);
 }
 
 resize();
+initFromParams();
 generate();
 animate(0);
 </script>

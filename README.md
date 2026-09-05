@@ -17,7 +17,7 @@ Un archivo HTML standalone que usa **Three.js** para generar una escena 3D inter
 
 ## Uso
 
-Solo abre `qrTree.html` en cualquier navegador moderno. No necesita servidor ni instalación.
+Solo abre `index.html` en cualquier navegador moderno. No necesita servidor ni instalación.
 
 ```
 # Opcional: si quieres un servidor local
@@ -29,14 +29,26 @@ npx serve .
 - **QR funcional** — el código generado se puede escanear con cualquier lector QR
 - **Árbol procedural** — tronco orgánico con CatmullRomCurves, ramificación recursiva y copa frondosa
 - **4 temporadas** — cada una con paleta de colores, partículas (pétalos, polen, hojas, nieve) y comportamiento único
-- **Interactivo** — arrastra para girar, rueda para acercar/alejar
-- **Descarga** — exporta la escena 3D o el QR plano como PNG
+- **Árboles únicos con semilla** — cada árbol se genera con una semilla reproducible; el botón 🎲 genera uno nuevo
+- **Compartir con un enlace** — la URL guarda `?url=...&season=...&seed=...` para que cualquiera abra tu árbol exacto
+- **Persistencia** — recuerda tu última URL, temporada y semilla (localStorage)
+- **Interactivo** — arrastra para girar, rueda o pellizco para acercar/alejar
+- **Descarga** — exporta la escena 3D (hasta 2K) o el QR plano como PNG
 - **Animación de crecimiento** — el árbol crece y se aplana con easing elástico
+- **Accesible** — respeta `prefers-reduced-motion` y estados ARIA en los controles
+
+## Compartir
+
+Cualquier árbol se puede compartir copiando el enlace (botón 🔗). El enlace codifica la URL del QR, la temporada y la semilla del árbol:
+
+```
+https://andregil003.github.io/qrTree/?url=https%3A%2F%2Fgithub.com%2Fandregil003&season=autumn&seed=123456789
+```
 
 ## Stack
 
 - [Three.js](https://threejs.org/) r128 — renders 3D
-- [qrcode-generator](https://github.com/nicktmro/node-qrcode) — generación de QR
+- [qrcode-generator](https://github.com/kazuhikoarase/qrcode-generator) — generación de QR
 - CSS custom — diseño editorial con tipografía Fraunces + Inter
 - JavaScript vanilla — sin build tools, sin frameworks
 
