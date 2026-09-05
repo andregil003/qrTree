@@ -1,6 +1,6 @@
 # 🌳 qrTree — Árbol de Bloques
 
-> **[▶ Ver en vivo](https://andregil003.github.io/qrTree/)** — abre el generador directo en tu navegador.
+> **Versión:** v1.0.0 · **[▶ Ver en vivo](https://andregil003.github.io/qrTree/)** — abre el generador directo en tu navegador.
 
 Generador de **QR 3D procedural** que convierte cualquier enlace en un árbol voxelizado que crece sobre el suelo de tu código QR real.
 
@@ -28,6 +28,7 @@ npx serve .
 
 - **QR funcional** — el código generado se puede escanear con cualquier lector QR
 - **Árbol procedural** — tronco orgánico con CatmullRomCurves, ramificación recursiva y copa frondosa
+- **Render premium** — bloom suave, antialiasing SMAA, reflejos de entorno (envMap procedural) y gradiente de fondo por temporada
 - **4 temporadas** — cada una con paleta de colores, partículas (pétalos, polen, hojas, nieve) y comportamiento único
 - **Árboles únicos con semilla** — cada árbol se genera con una semilla reproducible; el botón 🎲 genera uno nuevo
 - **Compartir con un enlace** — la URL guarda `?url=...&season=...&seed=...` para que cualquiera abra tu árbol exacto
@@ -47,10 +48,11 @@ https://andregil003.github.io/qrTree/?url=https%3A%2F%2Fgithub.com%2Fandregil003
 
 ## Stack
 
-- [Three.js](https://threejs.org/) r128 — renders 3D
+- [Three.js](https://threejs.org/) (vendored local) — renders 3D + postprocessing (EffectComposer, UnrealBloomPass, SMAAPass)
 - [qrcode-generator](https://github.com/kazuhikoarase/qrcode-generator) — generación de QR
 - CSS custom — diseño editorial con tipografía Fraunces + Inter
 - JavaScript vanilla — sin build tools, sin frameworks
+- Scripts de Three.js y sus addons en `vendor/` — sin CDN ni SRI
 
 ## Licencia
 

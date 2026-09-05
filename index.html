@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Árbol de Bloques — Generador de QR 3D</title>
+<!-- qrTree v1.0.0 -->
 <meta name="description" content="Genera un QR 3D con un árbol procedural que crece sobre tu código. 4 temporadas, descarga PNG y comparte tu árbol con un enlace.">
 <meta property="og:title" content="Árbol de Bloques — Generador de QR 3D">
 <meta property="og:description" content="Convierte cualquier enlace en un árbol voxelizado que crece sobre tu código QR real. 4 temporadas y árboles únicos con semilla.">
@@ -13,8 +14,17 @@
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🌳</text></svg>">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,600;1,9..144,500&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
-<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js" integrity="sha384-CI3ELBVUz9XQO+97x6nwMDPosPR5XvsxW2ua7N1Xeygeh1IxtgqtCkGfQY9WWdHu" crossorigin="anonymous"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js" integrity="sha384-mZT2gIty7ZDdOGkxfP6joZcYdMW1Jvj9dRlfpTmaJAKKXTqzygtB22k7FLe+KZC1" crossorigin="anonymous"></script>
+<script src="vendor/three.min.js"></script>
+<script src="vendor/CopyShader.js"></script>
+<script src="vendor/LuminosityHighPassShader.js"></script>
+<script src="vendor/SMAAShader.js"></script>
+<script src="vendor/EffectComposer.js"></script>
+<script src="vendor/ShaderPass.js"></script>
+<script src="vendor/MaskPass.js"></script>
+<script src="vendor/RenderPass.js"></script>
+<script src="vendor/UnrealBloomPass.js"></script>
+<script src="vendor/SMAAPass.js"></script>
+<script src="vendor/qrcode.min.js"></script>
 <style>
   :root{
     --bg:#f6f1e7; --ink:#2b2318; --ink-soft:#6b5f4f;
@@ -205,15 +215,43 @@ renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
-renderer.toneMappingExposure = 1.35;
+renderer.toneMappingExposure = 1.2;
 renderer.outputEncoding = THREE.sRGBEncoding;
 canvasWrap.insertBefore(renderer.domElement, canvasWrap.firstChild);
 
-scene.add(new THREE.AmbientLight(0xffffff, 0.5));
-const hemi = new THREE.HemisphereLight(0xfff8e1, 0x8d7f6f, 0.6);
+/* ---------- Postprocessing (bloom + antialiasing) ---------- */
+const composer = new THREE.EffectComposer(renderer);
+composer.addPass(new THREE.RenderPass(scene, camera));
+const bloomPass = new THREE.UnrealBloomPass(new THREE.Vector2(512, 512), 0.15, 0.5, 0.95);
+composer.addPass(bloomPass);
+const smaaPass = new THREE.SMAAPass();
+composer.addPass(smaaPass);
+
+/* ---------- Entorno con reflejos suaves (envMap procedural) ---------- */
+function createEnvironment(){
+  const pmrem = new THREE.PMREMGenerator(renderer);
+  const envScene = new THREE.Scene();
+  const addPanel = (color, pos, size) => {
+    const mat = new THREE.MeshBasicMaterial({ color });
+    const mesh = new THREE.Mesh(new THREE.PlaneGeometry(size, size), mat);
+    mesh.position.copy(pos);
+    mesh.lookAt(0, 0, 0);
+    envScene.add(mesh);
+  };
+  addPanel(0xfff0dd, new THREE.Vector3(10, 24, 8), 22);
+  addPanel(0xdce8ff, new THREE.Vector3(-8, 14, -8), 18);
+  addPanel(0xffe0b2, new THREE.Vector3(0, 7, -16), 14);
+  addPanel(0xf6f1e7, new THREE.Vector3(0, -1, 0), 34);
+  scene.environment = pmrem.fromScene(envScene).texture;
+  pmrem.dispose();
+}
+createEnvironment();
+
+scene.add(new THREE.AmbientLight(0xffffff, 0.4));
+const hemi = new THREE.HemisphereLight(0xfff8e1, 0x8d7f6f, 0.55);
 scene.add(hemi);
 
-const sun = new THREE.DirectionalLight(0xfff0dd, 1.6);
+const sun = new THREE.DirectionalLight(0xfff0dd, 1.75);
 sun.position.set(10, 24, 8);
 sun.castShadow = true;
 sun.shadow.mapSize.width = 2048;
@@ -224,11 +262,11 @@ sun.shadow.camera.near = 0.5; sun.shadow.camera.far = 60;
 sun.shadow.bias = -0.0005; sun.shadow.radius = 5;
 scene.add(sun);
 
-const fill = new THREE.DirectionalLight(0xdce8ff, 0.6);
+const fill = new THREE.DirectionalLight(0xdce8ff, 0.5);
 fill.position.set(-8, 14, -8);
 scene.add(fill);
 
-const rim = new THREE.DirectionalLight(0xffe0b2, 0.4);
+const rim = new THREE.DirectionalLight(0xffe0b2, 0.5);
 rim.position.set(0, 7, -16);
 scene.add(rim);
 
@@ -286,6 +324,8 @@ renderer.domElement.addEventListener('wheel', e => {
 function resize(){
   const w = canvasWrap.clientWidth, h = canvasWrap.clientHeight || 520;
   renderer.setSize(w, h);
+  composer.setSize(w, h);
+  bloomPass.setSize(w/2, h/2);
   const a = w/h, s = camera.top;
   camera.left = -s*a; camera.right = s*a;
   camera.updateProjectionMatrix();
@@ -305,6 +345,20 @@ toggleBtn.addEventListener('click', () => {
 
 /* ---------- Partículas ---------- */
 let particleSystem = null;
+let particleTexture = null;
+function createParticleTexture(){
+  const c = document.createElement('canvas');
+  c.width = c.height = 64;
+  const ctx = c.getContext('2d');
+  const g = ctx.createRadialGradient(32,32,0,32,32,32);
+  g.addColorStop(0, 'rgba(255,255,255,1)');
+  g.addColorStop(0.35, 'rgba(255,255,255,0.85)');
+  g.addColorStop(1, 'rgba(255,255,255,0)');
+  ctx.fillStyle = g;
+  ctx.fillRect(0,0,64,64);
+  particleTexture = new THREE.CanvasTexture(c);
+}
+createParticleTexture();
 function createParticles(season) {
   if (particleSystem) { scene.remove(particleSystem); particleSystem.geometry.dispose(); particleSystem.material.dispose(); }
   const count = 200;
@@ -319,8 +373,9 @@ function createParticles(season) {
   geo.setAttribute('velocity', new THREE.BufferAttribute(vel,3));
   geo.setAttribute('phase', new THREE.BufferAttribute(ph,1));
   const mat = new THREE.PointsMaterial({
-    color: season.particleColor, size: season.particleType==='snow'?0.12:0.07,
-    transparent:true, opacity:0.65, sizeAttenuation:true, depthWrite:false, blending:THREE.AdditiveBlending
+    color: season.particleColor, size: season.particleType==='snow'?0.16:0.1,
+    map: particleTexture, transparent:true, opacity:0.8, sizeAttenuation:true, depthWrite:false,
+    blending: season.particleType==='snow' ? THREE.NormalBlending : THREE.AdditiveBlending
   });
   particleSystem = new THREE.Points(geo, mat);
   scene.add(particleSystem);
@@ -567,6 +622,30 @@ function generateTree(season){
   }
 }
 
+function shade(hex, amt){
+  const h = typeof hex === 'number' ? '#' + hex.toString(16).padStart(6, '0') : hex;
+  const n = parseInt(h.slice(1), 16);
+  const r = Math.min(255, Math.max(0, (n>>16) + amt));
+  const g = Math.min(255, Math.max(0, ((n>>8)&0xff) + amt));
+  const b = Math.min(255, Math.max(0, (n&0xff) + amt));
+  return '#' + ((1<<24) + (r<<16) + (g<<8) + b).toString(16).slice(1);
+}
+function createBackgroundTexture(season){
+  const c = document.createElement('canvas');
+  c.width = 2; c.height = 256;
+  const ctx = c.getContext('2d');
+  const g = ctx.createLinearGradient(0, 0, 0, 256);
+  const bgHex = '#' + season.bg.toString(16).padStart(6, '0');
+  g.addColorStop(0, shade(bgHex, 8));
+  g.addColorStop(0.45, bgHex);
+  g.addColorStop(1, shade(bgHex, -12));
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, 2, 256);
+  const tex = new THREE.CanvasTexture(c);
+  tex.encoding = THREE.sRGBEncoding;
+  return tex;
+}
+
 function setInstanceColors(inst, pieces, getColor){
   if (!inst || !pieces.length) return;
   const color = new THREE.Color();
@@ -580,13 +659,13 @@ function buildScene(qr){
   const n = qr.getModuleCount();
   const cx = (n-1)/2;
   
-  scene.background = new THREE.Color(season.bg);
+  scene.background = createBackgroundTexture(season);
   scene.fog.color = new THREE.Color(season.bg);
   
   // Base QR sólida
   const qrWorldSize = n * unit;
   const baseGeo = new THREE.BoxGeometry(qrWorldSize + unit*3, groundH*0.6, qrWorldSize + unit*3);
-  const baseMat = new THREE.MeshStandardMaterial({ color: season.qrBase, roughness:0.95 });
+  const baseMat = new THREE.MeshStandardMaterial({ color: season.qrBase, roughness:0.85, envMapIntensity:0.35 });
   qrBaseInst = new THREE.Mesh(baseGeo, baseMat);
   qrBaseInst.position.y = groundH * 0.25;
   qrBaseInst.receiveShadow = true;
@@ -594,7 +673,7 @@ function buildScene(qr){
   
   // Módulos QR
   const groundGeo = new THREE.BoxGeometry(unit*0.9, groundH*1.15, unit*0.9);
-  const groundMat = new THREE.MeshStandardMaterial({ roughness:0.9 });
+  const groundMat = new THREE.MeshStandardMaterial({ roughness:0.82, envMapIntensity:0.4 });
   groundInst = new THREE.InstancedMesh(groundGeo, groundMat, n*n);
   groundInst.receiveShadow = true;
   const dummy = new THREE.Object3D(), color = new THREE.Color();
@@ -663,22 +742,33 @@ function buildScene(qr){
   
   // Madera
   const woodGeo = new THREE.BoxGeometry(1,1,1);
-  const woodMat = new THREE.MeshStandardMaterial({ color: season.trunk, roughness:0.9, metalness:0.05 });
+  const woodMat = new THREE.MeshStandardMaterial({ color: season.trunk, roughness:0.82, metalness:0.02, envMapIntensity:0.45 });
   woodInst = new THREE.InstancedMesh(woodGeo, woodMat, Math.max(woodPieces.length,1));
   woodInst.castShadow = true; woodInst.receiveShadow = true;
   scene.add(woodInst);
+  setInstanceColors(woodInst, woodPieces, c => {
+    const t = Math.max(0, Math.min(1, (c.y - groundH) / 6));
+    const col = new THREE.Color(season.trunk).lerp(new THREE.Color(season.branch), t * 0.55);
+    col.offsetHSL(0, 0, (rng() - 0.5) * 0.05);
+    return col;
+  });
   
   // Hojas
   const leafGeo = new THREE.BoxGeometry(1,1,1);
-  const leafMat = new THREE.MeshStandardMaterial({ roughness:0.65, metalness:0.05 });
+  const leafMat = new THREE.MeshStandardMaterial({ roughness:0.55, metalness:0.0, envMapIntensity:0.7 });
   leafInst = new THREE.InstancedMesh(leafGeo, leafMat, Math.max(leafPieces.length,1));
   leafInst.castShadow = true; leafInst.receiveShadow = true;
   scene.add(leafInst);
-  setInstanceColors(leafInst, leafPieces, c => season.canopy[c.colorIdx]);
+  setInstanceColors(leafInst, leafPieces, c => {
+    const col = new THREE.Color(season.canopy[c.colorIdx]);
+    const t = Math.max(0, Math.min(1, (c.y - groundH) / 7));
+    col.offsetHSL(0, 0.04, (t - 0.5) * 0.1);
+    return col;
+  });
   
   // Decoraciones
   const decorGeo = new THREE.BoxGeometry(1,1,1);
-  const decorMat = new THREE.MeshStandardMaterial({ roughness:0.4, metalness:0.1 });
+  const decorMat = new THREE.MeshStandardMaterial({ roughness:0.3, metalness:0.0, envMapIntensity:0.9 });
   decorInst = new THREE.InstancedMesh(decorGeo, decorMat, Math.max(decorPieces.length,1));
   decorInst.castShadow = true;
   scene.add(decorInst);
@@ -686,7 +776,7 @@ function buildScene(qr){
   
   // Grama
   const grassGeo = new THREE.BoxGeometry(1,1,1);
-  const grassMat = new THREE.MeshStandardMaterial({ roughness:0.85 });
+  const grassMat = new THREE.MeshStandardMaterial({ roughness:0.75, envMapIntensity:0.5 });
   grassInst = new THREE.InstancedMesh(grassGeo, grassMat, Math.max(grassPieces.length,1));
   grassInst.castShadow = true; grassInst.receiveShadow = true;
   scene.add(grassInst);
@@ -694,7 +784,7 @@ function buildScene(qr){
   
   // Hojas caídas
   const fallenGeo = new THREE.BoxGeometry(1, unit*0.12, 1);
-  const fallenMat = new THREE.MeshStandardMaterial({ roughness:0.8, metalness:0.0 });
+  const fallenMat = new THREE.MeshStandardMaterial({ roughness:0.7, metalness:0.0, envMapIntensity:0.6 });
   fallenInst = new THREE.InstancedMesh(fallenGeo, fallenMat, Math.max(fallenPieces.length,1));
   fallenInst.castShadow = true; fallenInst.receiveShadow = true;
   scene.add(fallenInst);
@@ -702,7 +792,7 @@ function buildScene(qr){
   
   // Marcas
   const markGeo = new THREE.BoxGeometry(1, unit*0.06, 1);
-  const markMat = new THREE.MeshStandardMaterial({ roughness:1.0, transparent:true, opacity:0.8 });
+  const markMat = new THREE.MeshStandardMaterial({ roughness:0.9, transparent:true, opacity:0.8, envMapIntensity:0.3 });
   markInst = new THREE.InstancedMesh(markGeo, markMat, Math.max(markPieces.length,1));
   markInst.receiveShadow = true;
   scene.add(markInst);
@@ -924,14 +1014,19 @@ document.getElementById('copyLinkBtn').addEventListener('click', () => {
 document.getElementById('downloadTreeBtn').addEventListener('click', () => {
   const w = canvasWrap.clientWidth, h = canvasWrap.clientHeight || 520;
   const scale = Math.min(4, 2560 / Math.max(w, h));
-  renderer.setSize(Math.round(w*scale), Math.round(h*scale), false);
-  renderer.render(scene, camera);
+  const rw = Math.round(w*scale), rh = Math.round(h*scale);
+  renderer.setSize(rw, rh, false);
+  composer.setSize(rw, rh);
+  bloomPass.setSize(rw/2, rh/2);
+  composer.render();
   const link = document.createElement('a');
   link.download = 'arbol-de-bloques.png';
   link.href = renderer.domElement.toDataURL('image/png');
   link.click();
   renderer.setSize(w, h, false);
-  renderer.render(scene, camera);
+  composer.setSize(w, h);
+  bloomPass.setSize(w/2, h/2);
+  composer.render();
 });
 document.getElementById('downloadFlatBtn').addEventListener('click', () => {
   const canvas = document.getElementById('flatQr');
@@ -968,7 +1063,7 @@ function animate(time){
   }
   
   updateCamera();
-  renderer.render(scene, camera);
+  composer.render();
 }
 
 resize();
