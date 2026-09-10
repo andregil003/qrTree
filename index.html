@@ -3,6 +3,8 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="theme-color" content="#f6f1e7">
+<link rel="manifest" href="manifest.webmanifest">
 <title>Árbol de Bloques — Generador de QR 3D</title>
 <!-- qrTree v1.0.0 -->
 <meta name="description" content="Genera un QR 3D con un árbol procedural que crece sobre tu código. 4 temporadas, descarga PNG y comparte tu árbol con un enlace.">
@@ -41,7 +43,7 @@
   h1{ font-family:'Fraunces',serif; font-weight:600; font-size:clamp(26px,4vw,36px); margin:0 0 6px; letter-spacing:-0.01em; }
   header p{ margin:0; color:var(--ink-soft); font-size:14.5px; max-width:540px; line-height:1.5; }
   main{ flex:1; display:grid; grid-template-columns:300px 1fr; gap:0; padding:12px clamp(20px,4vw,48px) clamp(20px,4vw,48px); }
-  @media (max-width:880px){ main{ grid-template-columns:1fr; } }
+  @media (max-width:880px){ main{ grid-template-columns:1fr; } .panel{ order:2; padding:16px; } .stage{ order:1; } }
   .panel{ background:var(--panel); border:1px solid var(--line); border-radius:18px; padding:20px; height:fit-content; display:flex; flex-direction:column; gap:18px; }
   .field label{ display:block; font-size:13px; font-weight:600; margin-bottom:8px; }
   .field input[type=text]{ width:100%; padding:11px 12px; border-radius:10px; border:1px solid var(--line); font-family:'Inter',sans-serif; font-size:14px; background:#fff; color:var(--ink); }
@@ -57,12 +59,12 @@
   .ghost-btn:hover{ background:#faf8f3; }
   .error-msg{ font-size:12.5px; color:#b3261e; background:#fdecea; border:1px solid #f5c6c0; border-radius:10px; padding:9px 12px; margin:0; line-height:1.4; }
   .flatqr-wrap{ display:flex; flex-direction:column; align-items:center; gap:10px; }
-  .flatqr-wrap canvas{ border-radius:8px; border:1px solid var(--line); }
+  .flatqr-wrap canvas{ border-radius:8px; border:1px solid var(--line); width:100%; max-width:220px; height:auto; }
   .flatqr-note{ font-size:12px; color:var(--ink-soft); text-align:center; line-height:1.4; }
   .stage{ position:relative; border-radius:18px; overflow:hidden; min-height:520px; margin-left:16px; border:1px solid var(--line); cursor:grab; display:flex; flex-direction:column; background: linear-gradient(180deg, #fbf7ef 0%, #f0ebe0 100%); }
-  @media (max-width:880px){ .stage{ margin-left:0; margin-top:16px; min-height:400px; } }
+  @media (max-width:880px){ .stage{ margin-left:0; margin-top:0; min-height:56vh; } }
   .stage:active{ cursor:grabbing; }
-  .canvas-wrap{ position:relative; flex:1; }
+  .canvas-wrap{ position:relative; flex:1; touch-action:none; }
   .canvas-wrap canvas{ display:block; width:100%; height:100%; }
   .badge{ position:absolute; top:14px; left:14px; font-size:12px; font-weight:600; background:rgba(255,255,255,0.85); backdrop-filter:blur(8px); padding:6px 14px; border-radius:999px; pointer-events:none; box-shadow:0 2px 8px rgba(0,0,0,0.04); transition:all .3s; }
   .hint{ position:absolute; bottom:14px; left:50%; transform:translateX(-50%); font-size:12px; color:rgba(43,35,24,0.5); background:rgba(255,255,255,0.7); padding:6px 14px; border-radius:999px; backdrop-filter:blur(4px); pointer-events:none; }
@@ -71,6 +73,7 @@
   .stage-actions button:hover{ transform:translateY(-1px); box-shadow:0 4px 12px rgba(0,0,0,0.06); }
   .stage-actions .primary{ background:var(--ink); color:#fdf9f0; border-color:var(--ink); }
   .stage-actions .primary:hover{ background:#3d3226; }
+  .sr-only{ position:absolute; width:1px; height:1px; padding:0; margin:-1px; overflow:hidden; clip:rect(0,0,0,0); white-space:nowrap; border:0; }
 </style>
 </head>
 <body>
@@ -114,7 +117,7 @@
   <div class="stage" id="stage">
     <div class="canvas-wrap" id="canvasWrap" role="img" aria-label="Escena 3D del árbol de bloques sobre tu código QR">
       <div class="badge" id="modeBadge">🌳 Árbol</div>
-      <div class="hint">Arrastra para girar · rueda para acercar</div>
+      <div class="hint" id="hint">Arrastra para girar · rueda para acercar</div>
     </div>
     <div class="stage-actions">
       <button class="primary" id="toggleGrowBtn">Aplanar a QR</button>
@@ -122,6 +125,8 @@
     </div>
   </div>
 </main>
+
+<div id="liveRegion" class="sr-only" aria-live="polite"></div>
 
 <script>
 /* ---------- Paletas ---------- */
@@ -168,6 +173,9 @@ const SEASONS = {
   }
 };
 let currentSeason = 'summer';
+const isMobile = window.matchMedia('(pointer: coarse)').matches;
+const liveRegion = document.getElementById('liveRegion');
+function announce(msg){ liveRegion.textContent = msg; }
 
 /* ---------- Semilla / PRNG reproducible ---------- */
 function mulberry32(a){ return function(){ a|=0; a=a+0x6D2B79F5|0; let t=Math.imul(a^a>>>15,1|a); t=t+Math.imul(t^t>>>7,61|t)^t; return ((t^t>>>14)>>>0)/4294967296; }; }
@@ -184,6 +192,7 @@ function setSeason(key, skipGenerate){
     b.setAttribute('aria-pressed', String(active));
   });
   if (!skipGenerate) generate();
+  announce('Temporada: ' + SEASONS[key].label);
 }
 Object.entries(SEASONS).forEach(([key, s]) => {
   const btn = document.createElement('button');
@@ -204,6 +213,8 @@ document.getElementById('visitLinkBtn').addEventListener('click', () => {
 
 /* ---------- Three.js ---------- */
 const canvasWrap = document.getElementById('canvasWrap');
+const hint = document.getElementById('hint');
+if (isMobile) hint.textContent = 'Arrastra para girar · Pellizca para acercar';
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(SEASONS[currentSeason].bg);
 scene.fog = new THREE.Fog(SEASONS[currentSeason].bg, 18, 45);
@@ -211,7 +222,7 @@ scene.fog = new THREE.Fog(SEASONS[currentSeason].bg, 18, 45);
 const frustum = 11;
 let camera = new THREE.OrthographicCamera(-frustum, frustum, frustum, -frustum, 0.1, 100);
 const renderer = new THREE.WebGLRenderer({ antialias:true, alpha:true, powerPreference:'high-performance' });
-renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, isMobile ? 1.5 : 2));
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
@@ -224,8 +235,10 @@ const composer = new THREE.EffectComposer(renderer);
 composer.addPass(new THREE.RenderPass(scene, camera));
 const bloomPass = new THREE.UnrealBloomPass(new THREE.Vector2(512, 512), 0.15, 0.5, 0.95);
 composer.addPass(bloomPass);
-const smaaPass = new THREE.SMAAPass();
-composer.addPass(smaaPass);
+if (!isMobile){
+  const smaaPass = new THREE.SMAAPass();
+  composer.addPass(smaaPass);
+}
 
 /* ---------- Entorno con reflejos suaves (envMap procedural) ---------- */
 function createEnvironment(){
@@ -254,8 +267,8 @@ scene.add(hemi);
 const sun = new THREE.DirectionalLight(0xfff0dd, 1.75);
 sun.position.set(10, 24, 8);
 sun.castShadow = true;
-sun.shadow.mapSize.width = 2048;
-sun.shadow.mapSize.height = 2048;
+sun.shadow.mapSize.width = isMobile ? 1024 : 2048;
+sun.shadow.mapSize.height = isMobile ? 1024 : 2048;
 sun.shadow.camera.left = -20; sun.shadow.camera.right = 20;
 sun.shadow.camera.top = 20; sun.shadow.camera.bottom = -20;
 sun.shadow.camera.near = 0.5; sun.shadow.camera.far = 60;
@@ -287,6 +300,7 @@ let lastPinchDist = 0;
 renderer.domElement.addEventListener('pointerdown', e => {
   pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
   if (pointers.size === 1){ dragging = true; lastX = e.clientX; lastY = e.clientY; }
+  if (hint){ hint.style.opacity = '0'; setTimeout(() => { if (hint) hint.style.display = 'none'; }, 400); }
 });
 window.addEventListener('pointerup', e => {
   pointers.delete(e.pointerId);
@@ -299,10 +313,7 @@ window.addEventListener('pointermove', e => {
     const pts = [...pointers.values()];
     const d = Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y);
     if (lastPinchDist > 0){
-      const s = Math.min(Math.max(camera.top / (d / lastPinchDist), 4), 24);
-      const a = canvasWrap.clientWidth / (canvasWrap.clientHeight || 520);
-      camera.left = -s*a; camera.right = s*a; camera.top = s; camera.bottom = -s;
-      camera.updateProjectionMatrix();
+      setZoom(camera.top / (d / lastPinchDist));
     }
     lastPinchDist = d;
     return;
@@ -313,24 +324,44 @@ window.addEventListener('pointermove', e => {
   phi = Math.min(Math.max(phi - (e.clientY - lastY) * 0.006, 0.25), 1.4);
   lastX = e.clientX; lastY = e.clientY;
 });
-renderer.domElement.addEventListener('wheel', e => {
-  e.preventDefault();
-  const s = Math.min(Math.max(camera.top + e.deltaY * 0.008, 4), 24);
+function setZoom(s){
+  s = Math.min(Math.max(s, 4), 24);
   const a = canvasWrap.clientWidth / (canvasWrap.clientHeight || 520);
   camera.left = -s*a; camera.right = s*a; camera.top = s; camera.bottom = -s;
   camera.updateProjectionMatrix();
+}
+renderer.domElement.addEventListener('wheel', e => {
+  e.preventDefault();
+  setZoom(camera.top + e.deltaY * 0.008);
 }, { passive:false });
 
 function resize(){
   const w = canvasWrap.clientWidth, h = canvasWrap.clientHeight || 520;
   renderer.setSize(w, h);
   composer.setSize(w, h);
-  bloomPass.setSize(w/2, h/2);
-  const a = w/h, s = camera.top;
-  camera.left = -s*a; camera.right = s*a;
+  bloomPass.setSize(Math.max(1, Math.floor(w/(isMobile?4:2))), Math.max(1, Math.floor(h/(isMobile?4:2))));
+  const a = w/h;
+  // En portrait, asegurar que el contenido (QR ~8u) quepa en el ancho visible
+  const s = a < 1 ? Math.max(camera.top, 5/a) : camera.top;
+  camera.left = -s*a; camera.right = s*a; camera.top = s; camera.bottom = -s;
   camera.updateProjectionMatrix();
 }
 window.addEventListener('resize', resize);
+
+// Keyboard contract: flechas orbitan, +/- zoom
+window.addEventListener('keydown', e => {
+  const tag = e.target && e.target.tagName;
+  if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'BUTTON') return;
+  const step = 0.08;
+  if (e.key === 'ArrowLeft') theta -= step;
+  else if (e.key === 'ArrowRight') theta += step;
+  else if (e.key === 'ArrowUp') phi = Math.min(Math.max(phi - step, 0.25), 1.4);
+  else if (e.key === 'ArrowDown') phi = Math.min(Math.max(phi + step, 0.25), 1.4);
+  else if (e.key === '+' || e.key === '=') setZoom(camera.top - 1.5);
+  else if (e.key === '-' || e.key === '_') setZoom(camera.top + 1.5);
+  else return;
+  e.preventDefault();
+});
 
 /* ---------- Estado ---------- */
 let growth = 1, growthTarget = 1, animTime = 0;
@@ -543,7 +574,7 @@ function generateTree(season){
     const r = cluster.radius;
     const steps = Math.ceil(r/(unit*0.6));
     let clusterLeaves = 0;
-    const maxLeaves = Math.floor(rand(100, 180));
+    const maxLeaves = Math.floor(rand(isMobile ? 55 : 100, isMobile ? 90 : 180));
     
     for (let lx=-steps; lx<=steps; lx++){
       for (let ly=-Math.ceil(steps*0.9); ly<=Math.ceil(steps*1.0); ly++){
@@ -567,7 +598,7 @@ function generateTree(season){
     
     // Nieve en invierno (sin flores)
     if (currentSeason==='winter'){
-      for (let s=0; s<18; s++){
+      for (let s=0; s<(isMobile?10:18); s++){
         const angle = rng()*Math.PI*2;
         const dist = rng()*r*0.5;
         addDecor(
@@ -601,7 +632,7 @@ function generateTree(season){
   }
 
   // === HOJAS CAÍDAS ===
-  const fallenCount = currentSeason==='winter'? 25 : (currentSeason==='autumn'? 80 : 40);
+  const fallenCount = currentSeason==='winter' ? (isMobile?15:25) : (currentSeason==='autumn' ? (isMobile?45:80) : (isMobile?25:40));
   for (let f=0; f<fallenCount; f++){
     const angle = rng()*Math.PI*2;
     const dist = rand(0, 6.0);
@@ -613,7 +644,7 @@ function generateTree(season){
   }
   
   // Brotes
-  for (let o=0; o<15; o++){
+  for (let o=0; o<(isMobile?8:15); o++){
     const angle = rng()*Math.PI*2;
     const dist = rand(1.5, 5.0);
     const x = Math.cos(angle)*dist;
@@ -703,7 +734,7 @@ function buildScene(qr){
     for (let col=0; col<n; col++){
       if (qr.isDark(row,col)){
         const x=(col-cx)*unit, z=(row-cx)*unit;
-        const nGrass = Math.floor(rand(2,5));
+        const nGrass = Math.floor(rand(isMobile ? 1 : 2, isMobile ? 3 : 5));
         for (let g=0; g<nGrass; g++){
           const gx = x + rand(-unit*0.25, unit*0.25);
           const gz = z + rand(-unit*0.25, unit*0.25);
@@ -948,6 +979,7 @@ function generate(){
   animTime = 0;
   buildScene(qr);
   drawFlatQr(qr);
+  announce('Árbol generado para ' + text);
   try {
     localStorage.setItem('qrtree:url', text);
     localStorage.setItem('qrtree:season', currentSeason);
@@ -993,6 +1025,24 @@ function initFromParams(){
 }
 
 document.getElementById('randomBtn').addEventListener('click', () => { newSeed(); generate(); });
+function copyToClipboard(text){
+  if (navigator.clipboard && navigator.clipboard.writeText) return navigator.clipboard.writeText(text);
+  return new Promise((resolve, reject) => {
+    const ta = document.createElement('textarea');
+    ta.value = text; document.body.appendChild(ta); ta.select();
+    try { document.execCommand('copy'); resolve(); }
+    catch(e){ reject(e); }
+    document.body.removeChild(ta);
+  });
+}
+function saveBlob(blob, filename){
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  setTimeout(() => { document.body.removeChild(a); URL.revokeObjectURL(url); }, 1000);
+}
 document.getElementById('copyLinkBtn').addEventListener('click', () => {
   const text = document.getElementById('urlInput').value.trim() || 'https://claude.ai';
   const params = new URLSearchParams({ url: text, season: currentSeason, seed: String(seed) });
@@ -1000,56 +1050,67 @@ document.getElementById('copyLinkBtn').addEventListener('click', () => {
   const btn = document.getElementById('copyLinkBtn');
   const old = btn.textContent;
   const done = () => { btn.textContent = '✅ ¡Enlace copiado!'; setTimeout(() => btn.textContent = old, 2000); };
-  if (navigator.clipboard && navigator.clipboard.writeText) {
-    navigator.clipboard.writeText(link).then(done).catch(() => showError('No se pudo copiar el enlace.'));
+  if (isMobile && navigator.share){
+    navigator.share({ title: 'Mi árbol QR', text: 'Mira mi árbol QR', url: link }).then(done).catch(() => {});
   } else {
-    const ta = document.createElement('textarea');
-    ta.value = link; document.body.appendChild(ta); ta.select();
-    try { document.execCommand('copy'); done(); }
-    catch(e){ showError('No se pudo copiar el enlace.'); }
-    document.body.removeChild(ta);
+    copyToClipboard(link).then(done).catch(() => showError('No se pudo copiar el enlace.'));
   }
 });
 
 document.getElementById('downloadTreeBtn').addEventListener('click', () => {
   const w = canvasWrap.clientWidth, h = canvasWrap.clientHeight || 520;
-  const scale = Math.min(4, 2560 / Math.max(w, h));
+  const maxDim = isMobile ? 2048 : 2560;
+  const scale = Math.min(4, maxDim / Math.max(w, h));
   const rw = Math.round(w*scale), rh = Math.round(h*scale);
   renderer.setSize(rw, rh, false);
   composer.setSize(rw, rh);
   bloomPass.setSize(rw/2, rh/2);
   composer.render();
-  const link = document.createElement('a');
-  link.download = 'arbol-de-bloques.png';
-  link.href = renderer.domElement.toDataURL('image/png');
-  link.click();
-  renderer.setSize(w, h, false);
-  composer.setSize(w, h);
-  bloomPass.setSize(w/2, h/2);
-  composer.render();
+  renderer.domElement.toBlob(blob => {
+    renderer.setSize(w, h, false);
+    composer.setSize(w, h);
+    bloomPass.setSize(w/2, h/2);
+    composer.render();
+    if (!blob){ showError('No se pudo generar la imagen.'); return; }
+    const file = new File([blob], 'arbol-de-bloques.png', { type: 'image/png' });
+    if (isMobile && navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) {
+      navigator.share({ files: [file], title: 'Mi árbol QR' }).catch(() => {});
+    } else {
+      saveBlob(blob, 'arbol-de-bloques.png');
+    }
+  }, 'image/png');
 });
 document.getElementById('downloadFlatBtn').addEventListener('click', () => {
   const canvas = document.getElementById('flatQr');
-  const link = document.createElement('a');
-  link.download = 'codigo-qr.png';
-  link.href = canvas.toDataURL('image/png');
-  link.click();
+  canvas.toBlob(blob => {
+    if (!blob){ showError('No se pudo generar el QR.'); return; }
+    const file = new File([blob], 'codigo-qr.png', { type: 'image/png' });
+    if (isMobile && navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) {
+      navigator.share({ files: [file] }).catch(() => {});
+    } else {
+      saveBlob(blob, 'codigo-qr.png');
+    }
+  }, 'image/png');
 });
 
 let lastTime = 0;
+let frameCount = 0;
+let rafId = 0;
 const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 function animate(time){
-  requestAnimationFrame(animate);
+  frameCount++;
   const dt = Math.min((time-lastTime)/1000, 0.1);
   lastTime = time;
   animTime += dt;
-  
+  // En móvil estable, saltar la actualización de instancias en frames impares (mitad de coste)
+  const idleSkip = isMobile && growthTarget===1 && (frameCount & 1) === 1;
+
   if (prefersReducedMotion){
     if (Math.abs(growth-growthTarget)>0.001){
       growth = growthTarget;
       applyGrowth(growth, SEASONS[currentSeason], true);
     }
-  } else {
+  } else if (!idleSkip) {
     if (Math.abs(growth-growthTarget)>0.001){
       growth += (growthTarget-growth)*0.05;
       applyGrowth(growth, SEASONS[currentSeason]);
@@ -1061,15 +1122,33 @@ function animate(time){
     }
     updateParticles(SEASONS[currentSeason]);
   }
-  
+
   updateCamera();
   composer.render();
+}
+function loop(time){
+  rafId = requestAnimationFrame(loop);
+  animate(time);
+}
+const stageEl = document.querySelector('.stage');
+if ('IntersectionObserver' in window && stageEl){
+  new IntersectionObserver(entries => {
+    const visible = entries[0].isIntersecting;
+    if (visible && rafId === 0){
+      lastTime = performance.now();
+      rafId = requestAnimationFrame(loop);
+    } else if (!visible && rafId !== 0){
+      cancelAnimationFrame(rafId);
+      rafId = 0;
+    }
+  }, { threshold: 0.05 }).observe(stageEl);
+} else {
+  rafId = requestAnimationFrame(loop);
 }
 
 resize();
 initFromParams();
 generate();
-animate(0);
 </script>
 </body>
 </html>
