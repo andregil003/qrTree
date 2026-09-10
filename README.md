@@ -1,6 +1,6 @@
 # 🌳 qrTree — Árbol de Bloques
 
-> **Versión:** v1.1.0 · **[▶ Ver en vivo](https://andregil003.github.io/qrTree/)** — abre el generador directo en tu navegador.
+> **Versión:** v1.2.0 · **[▶ Ver en vivo](https://andregil003.github.io/qrTree/)** — abre el generador directo en tu navegador.
 
 Generador de **QR 3D procedural** que convierte cualquier enlace en un árbol voxelizado que crece sobre el suelo de tu código QR real.
 
@@ -26,6 +26,12 @@ npx serve .
 
 ## Características
 
+- **5 estilos de QR** — Clásico, Redondo, Diamante, Voxel y Minimal (en el suelo 3D y el QR plano)
+- **Pixel art por tile** — activa "Pintar tiles" y colorea cada cuadro del QR con el color de acento
+- **Importar imagen** — sube una imagen y se convierte en pixel art sobre la grilla del QR
+- **Color de acento** — personaliza el color de los módulos oscuros (persistente y compartible)
+- **Título de negocio** — texto opcional que se imprime bajo el QR plano
+- **Forma de copa** — Redonda, Piramidal, Paraguas o Llorona
 - **QR funcional** — el código generado se puede escanear con cualquier lector QR
 - **Árbol procedural** — tronco orgánico con CatmullRomCurves, ramificación recursiva y copa frondosa
 - **Render premium** — bloom suave, antialiasing SMAA (desktop), reflejos de entorno (envMap procedural) y gradiente de fondo por temporada
@@ -34,7 +40,7 @@ npx serve .
 - **Compartir con un enlace** — la URL guarda `?url=...&season=...&seed=...` para que cualquiera abra tu árbol exacto
 - **Persistencia** — recuerda tu última URL, temporada y semilla (localStorage)
 - **Interactivo** — arrastra para girar, rueda o pellizco para acercar/alejar; también con teclado (flechas orbitan, `+`/`-` zoom)
-- **Descarga** — exporta la escena 3D (hasta 2K) o el QR plano como PNG; en móvil abre el menú nativo de compartir
+- **Descarga** — exporta la escena 3D (hasta 2K), el QR plano o un **GIF animado del árbol creciendo**; en móvil abre el menú nativo de compartir
 - **Animación de crecimiento** — el árbol crece y se aplana con easing elástico
 - **Accesible** — respeta `prefers-reduced-motion`, estados ARIA y anuncios `aria-live` al cambiar temporada/generar
 

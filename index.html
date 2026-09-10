@@ -27,6 +27,7 @@
 <script src="vendor/UnrealBloomPass.js"></script>
 <script src="vendor/SMAAPass.js"></script>
 <script src="vendor/qrcode.min.js"></script>
+<script src="vendor/gif.js"></script>
 <style>
   :root{
     --bg:#f6f1e7; --ink:#2b2318; --ink-soft:#6b5f4f;
@@ -48,6 +49,10 @@
   .field label{ display:block; font-size:13px; font-weight:600; margin-bottom:8px; }
   .field input[type=text]{ width:100%; padding:11px 12px; border-radius:10px; border:1px solid var(--line); font-family:'Inter',sans-serif; font-size:14px; background:#fff; color:var(--ink); }
   .field input[type=text]:focus{ outline:2px solid var(--accent); outline-offset:1px; }
+  .field select{ width:100%; padding:10px 12px; border-radius:10px; border:1px solid var(--line); font-family:'Inter',sans-serif; font-size:14px; background:#fff; color:var(--ink); }
+  .field input[type=color]{ width:100%; height:42px; padding:4px; border-radius:10px; border:1px solid var(--line); background:#fff; cursor:pointer; }
+  .pixelart-row{ display:flex; gap:8px; }
+  .pixelart-row button{ flex:1; }
   .seasons{ display:grid; grid-template-columns:1fr 1fr; gap:8px; }
   .season-btn{ border:1px solid var(--line); background:#fff; border-radius:12px; padding:10px 8px; font-size:13px; font-weight:500; cursor:pointer; display:flex; align-items:center; gap:8px; color:var(--ink); transition:all .2s; }
   .season-btn .dot{ width:10px; height:10px; border-radius:50%; flex-shrink:0; }
@@ -95,6 +100,48 @@
       <div class="seasons" id="seasonPicker"></div>
     </div>
 
+    <div class="field">
+      <label for="styleSelect">Estilo de QR</label>
+      <select id="styleSelect">
+        <option value="clasico">Clásico</option>
+        <option value="redondo">Redondo</option>
+        <option value="diamante">Diamante</option>
+        <option value="voxel">Voxel</option>
+        <option value="minimal">Minimal</option>
+      </select>
+    </div>
+
+    <div class="field">
+      <label for="canopySelect">Forma de copa</label>
+      <select id="canopySelect">
+        <option value="redonda">Redonda</option>
+        <option value="piramidal">Piramidal</option>
+        <option value="paraguas">Paraguas</option>
+        <option value="llorona">Llorona</option>
+      </select>
+    </div>
+
+    <div class="field">
+      <label for="accentColor">Color de acento (módulos oscuros)</label>
+      <input type="color" id="accentColor" value="#1b5e20">
+    </div>
+
+    <div class="field">
+      <label for="titleInput">Título (opcional, se imprime bajo el QR)</label>
+      <input type="text" id="titleInput" placeholder="Nombre de tu negocio" />
+    </div>
+
+    <div class="field">
+      <label>Pixel art</label>
+      <div class="pixelart-row">
+        <button class="ghost-btn" id="paintToggle" aria-pressed="false">🎨 Pintar tiles</button>
+        <button class="ghost-btn" id="resetTilesBtn">🧹 Restablecer</button>
+      </div>
+      <input type="file" id="imageInput" accept="image/*" hidden>
+      <button class="ghost-btn" id="importImgBtn">🖼️ Importar imagen</button>
+      <p class="flatqr-note">Activa "Pintar tiles" y haz clic en el QR para colorear cada cuadro con el color de acento.</p>
+    </div>
+
     <button class="generate-btn" id="generateBtn">Generar árbol</button>
 
     <button class="ghost-btn" id="randomBtn">🎲 Nuevo árbol aleatorio</button>
@@ -104,6 +151,7 @@
     <div class="divider"></div>
 
     <button class="ghost-btn" id="downloadTreeBtn">Descargar imagen de la escena</button>
+    <button class="ghost-btn" id="downloadGifBtn">🎞️ Descargar GIF animado</button>
 
     <div class="divider"></div>
 
@@ -177,6 +225,17 @@ const isMobile = window.matchMedia('(pointer: coarse)').matches;
 const liveRegion = document.getElementById('liveRegion');
 function announce(msg){ liveRegion.textContent = msg; }
 
+/* ---------- Personalización ---------- */
+const QR_STYLES = { clasico:'Clásico', redondo:'Redondo', diamante:'Diamante', voxel:'Voxel', minimal:'Minimal' };
+const CANOPY_STYLES = { redonda:'Redonda', piramidal:'Piramidal', paraguas:'Paraguas', llorona:'Llorona' };
+let currentQrStyle = 'clasico';
+let currentCanopy = 'redonda';
+let accentColor = null;
+let tileColors = null;
+let currentQr = null;
+let paintMode = false;
+let pendingTiles = null;
+
 /* ---------- Semilla / PRNG reproducible ---------- */
 function mulberry32(a){ return function(){ a|=0; a=a+0x6D2B79F5|0; let t=Math.imul(a^a>>>15,1|a); t=t+Math.imul(t^t>>>7,61|t)^t; return ((t^t>>>14)>>>0)/4294967296; }; }
 let seed = (Date.now() ^ (Math.random()*0xffffffff)) >>> 0;
@@ -206,6 +265,10 @@ Object.entries(SEASONS).forEach(([key, s]) => {
 });
 document.getElementById('urlInput').addEventListener('keydown', e => { if (e.key === 'Enter') generate(); });
 document.getElementById('generateBtn').addEventListener('click', generate);
+document.getElementById('styleSelect').addEventListener('change', e => { currentQrStyle = e.target.value; generate(); });
+document.getElementById('canopySelect').addEventListener('change', e => { currentCanopy = e.target.value; generate(); });
+document.getElementById('accentColor').addEventListener('input', e => { accentColor = e.target.value; if (currentQr) applyTileColors(); });
+document.getElementById('titleInput').addEventListener('input', () => { if (currentQr) drawFlatQr(currentQr); });
 document.getElementById('visitLinkBtn').addEventListener('click', () => {
   const v = document.getElementById('urlInput').value.trim();
   if (v) window.open(v.match(/^https?:\/\//) ? v : 'https://' + v, '_blank', 'noopener');
@@ -550,10 +613,10 @@ function generateTree(season){
     const nBranches = depth===0 ? Math.floor(rand(4,6)) : (depth===1?3:2);
     for (let b=0; b<nBranches; b++){
       const angle = (b/(nBranches-1 || 1) - 0.5)*rand(1.0,1.4) + rand(-0.3,0.3);
-      const elev = rand(0.2, 0.5);
+      const elev = currentCanopy==='llorona' ? rand(-0.35, 0.05) : rand(0.2, 0.5);
       const newDir = dir.clone().applyAxisAngle(new THREE.Vector3(0,1,0), angle);
       newDir.applyAxisAngle(new THREE.Vector3(1,0,0), elev).normalize();
-      newDir.y += 0.06; newDir.normalize();
+      newDir.y += currentCanopy==='llorona' ? -0.08 : 0.06; newDir.normalize();
       const newLen = length * rand(0.5, 0.7);
       const newThick = thickness * rand(0.55, 0.7);
       growBranch(end, newDir, newLen, newThick, depth+1, maxDepth, parentDelay + 0.06);
@@ -562,10 +625,13 @@ function generateTree(season){
   
   for (let i=0; i<5; i++){
     const angle = (i/5)*Math.PI*2 + rand(-0.3,0.3);
-    const elev = rand(0.4, 0.7);
+    const elev = currentCanopy==='llorona' ? rand(-0.2, 0.2) : rand(0.4, 0.7);
     const d = new THREE.Vector3(Math.cos(angle)*Math.cos(elev), Math.sin(elev), Math.sin(angle)*Math.cos(elev)).normalize();
     growBranch(topPoint, d, rand(1.8, 3.0), 0.3, 0, 4, 0.2);
   }
+
+  // === RAMA CENTRAL VERTICAL (rellena el hueco central) ===
+  growBranch(topPoint, new THREE.Vector3(0,1,0), rand(1.6, 2.4), 0.28, 0, 3, 0.2);
   
   // === COPA FRONDOSA (sin hueco) ===
   leafClusters.push({pos: topPoint.clone().add(new THREE.Vector3(0, 0.8, 0)), radius: 1.8, delay: 0.3});
@@ -583,9 +649,11 @@ function generateTree(season){
           const vx = cluster.pos.x + lx*unit*0.65;
           const vy = cluster.pos.y + ly*unit*0.65;
           const vz = cluster.pos.z + lz*unit*0.65;
-          const dx = (vx-cluster.pos.x)/r;
-          const dy = (vy-cluster.pos.y)/(r*0.8);
-          const dz = (vz-cluster.pos.z)/r;
+          const dy0 = (vy-cluster.pos.y)/(r*0.8);
+          const shapeScale = currentCanopy==='piramidal' ? Math.max(0.55, 1 - dy0*0.45) : (currentCanopy==='paraguas' ? (0.6 + dy0*0.4) : (currentCanopy==='llorona' ? (1 + dy0*0.25) : 1));
+          const dx = (vx-cluster.pos.x)/(r*shapeScale);
+          const dy = dy0/shapeScale;
+          const dz = (vz-cluster.pos.z)/(r*shapeScale);
           const d = Math.sqrt(dx*dx + dy*dy + dz*dz);
           const noise = (Math.sin(vx*7)+Math.cos(vy*8)+Math.sin(vz*7))*0.1;
           if (d < (0.82+noise) && rng()<season.leafChance){
@@ -702,21 +770,35 @@ function buildScene(qr){
   qrBaseInst.receiveShadow = true;
   scene.add(qrBaseInst);
   
-  // Módulos QR
-  const groundGeo = new THREE.BoxGeometry(unit*0.9, groundH*1.15, unit*0.9);
+  // Módulos QR (geometría según estilo)
+  let groundGeo;
+  if (currentQrStyle==='redondo') groundGeo = new THREE.CylinderGeometry(unit*0.42, unit*0.42, groundH*1.15, 12);
+  else if (currentQrStyle==='voxel') groundGeo = new THREE.BoxGeometry(unit*0.85, unit*1.4, unit*0.85);
+  else if (currentQrStyle==='minimal') groundGeo = new THREE.BoxGeometry(unit*0.55, groundH*1.15, unit*0.55);
+  else groundGeo = new THREE.BoxGeometry(unit*0.9, groundH*1.15, unit*0.9);
   const groundMat = new THREE.MeshStandardMaterial({ roughness:0.82, envMapIntensity:0.4 });
   groundInst = new THREE.InstancedMesh(groundGeo, groundMat, n*n);
   groundInst.receiveShadow = true;
   const dummy = new THREE.Object3D(), color = new THREE.Color();
   let gi=0;
+  const voxelH = {};
   for (let row=0; row<n; row++){
     for (let col=0; col<n; col++){
       const dark = qr.isDark(row,col);
       const x=(col-cx)*unit, z=(row-cx)*unit;
       dummy.position.set(x, groundH/2, z);
-      dummy.scale.set(1,1,1); dummy.rotation.set(0,0,0); dummy.updateMatrix();
+      dummy.scale.set(1,1,1); dummy.rotation.set(0,0,0);
+      if (currentQrStyle==='diamante') dummy.rotation.y = Math.PI/4;
+      if (currentQrStyle==='voxel' && dark){
+        const h = 1 + rand(0, 1.4);
+        voxelH[row+','+col] = h;
+        dummy.scale.y = h;
+        dummy.position.y = groundH/2 + groundH*1.15*(h-1)/2;
+      }
+      dummy.updateMatrix();
       groundInst.setMatrixAt(gi, dummy.matrix);
-      color.set(dark? season.qrDark : season.qrBase);
+      const tileColor = (tileColors && tileColors[row] && tileColors[row][col]) || (dark? season.qrDark : season.qrBase);
+      color.set(tileColor);
       const v=rand(-0.03,0.03);
       color.r+=v; color.g+=v; color.b+=v;
       groundInst.setColorAt(gi, color);
@@ -740,7 +822,8 @@ function buildScene(qr){
           const gz = z + rand(-unit*0.25, unit*0.25);
           const h = rand(0.12, 0.32);
           const colorIdx = Math.floor(rng()*season.grass.length);
-          const baseY = groundH + unit*0.15;
+          const voxH = voxelH[row+','+col] || 1;
+          const baseY = groundH + (voxH-1)*groundH*1.15 + unit*0.15;
           
           // Tallo delgado
           grassPieces.push({
@@ -954,28 +1037,107 @@ function drawFlatQr(qr){
   const season = SEASONS[currentSeason];
   const n = qr.getModuleCount();
   const quiet = 2;
-  const cell = canvas.width/(n+quiet*2);
+  const title = document.getElementById('titleInput').value.trim();
+  const titleH = title ? 34 : 0;
+  const qrSize = 180;
+  canvas.width = qrSize;
+  canvas.height = qrSize + titleH;
+  const cell = qrSize/(n+quiet*2);
+  const darkColor = accentColor || season.qrDark;
   ctx.fillStyle = season.qrBase;
-  ctx.fillRect(0,0,canvas.width,canvas.height);
-  ctx.fillStyle = season.qrDark;
+  ctx.fillRect(0,0,qrSize,qrSize);
   for (let row=0; row<n; row++){
     for (let col=0; col<n; col++){
-      if (qr.isDark(row,col)){
+      const dark = qr.isDark(row,col);
+      const tileColor = (tileColors && tileColors[row] && tileColors[row][col]) || (dark ? darkColor : null);
+      if (!tileColor) continue;
+      ctx.fillStyle = tileColor;
+      const x=(col+quiet)*cell, y=(row+quiet)*cell;
+      if (currentQrStyle==='redondo'){
+        ctx.beginPath();
+        ctx.arc(x+cell/2, y+cell/2, cell*0.42, 0, Math.PI*2);
+        ctx.fill();
+      } else if (currentQrStyle==='diamante'){
+        ctx.save();
+        ctx.translate(x+cell/2, y+cell/2);
+        ctx.rotate(Math.PI/4);
+        ctx.fillRect(-cell*0.34, -cell*0.34, cell*0.68, cell*0.68);
+        ctx.restore();
+      } else if (currentQrStyle==='minimal'){
+        const pad=cell*0.22;
+        ctx.fillRect(x+pad, y+pad, cell-pad*2, cell-pad*2);
+      } else {
         const pad=cell*0.06;
-        ctx.fillRect((col+quiet)*cell+pad, (row+quiet)*cell+pad, cell-pad*2, cell-pad*2);
+        ctx.fillRect(x+pad, y+pad, cell-pad*2, cell-pad*2);
       }
     }
   }
+  if (title){
+    ctx.fillStyle = season.qrDark;
+    ctx.font = '600 15px Inter, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(title, qrSize/2, qrSize + titleH/2);
+  }
+}
+
+function serializeTiles(){
+  if (!tileColors) return '';
+  const parts = [];
+  for (let r=0; r<tileColors.length; r++){
+    for (let c=0; c<tileColors[r].length; c++){
+      if (tileColors[r][c]) parts.push(r+','+c+','+tileColors[r][c].slice(1));
+    }
+  }
+  return parts.join(';');
+}
+function parseTiles(str){
+  if (!str || !currentQr) { tileColors = null; return; }
+  const n = currentQr.getModuleCount();
+  tileColors = Array.from({length:n},()=>Array(n).fill(null));
+  str.split(';').forEach(part => {
+    const [r,c,hex] = part.split(',');
+    if (r!==undefined && c!==undefined && hex) tileColors[+r][+c] = '#'+hex;
+  });
+}
+function saveTiles(){
+  try { localStorage.setItem('qrtree:tiles', serializeTiles()); } catch(e){}
+  const params = new URLSearchParams(location.search);
+  const tilesStr = serializeTiles();
+  if (tilesStr && tilesStr.length < 1800) params.set('tiles', tilesStr);
+  else params.delete('tiles');
+  history.replaceState(null, '', '?' + params.toString());
+}
+function applyTileColors(){
+  if (groundInst && currentQr){
+    const season = SEASONS[currentSeason];
+    const darkColor = accentColor || season.qrDark;
+    const color = new THREE.Color();
+    let gi=0;
+    for (let row=0; row<currentQr.getModuleCount(); row++){
+      for (let col=0; col<currentQr.getModuleCount(); col++){
+        const dark = currentQr.isDark(row,col);
+        const tileColor = (tileColors && tileColors[row] && tileColors[row][col]) || (dark ? darkColor : season.qrBase);
+        color.set(tileColor);
+        groundInst.setColorAt(gi, color);
+        gi++;
+      }
+    }
+    if (groundInst.instanceColor) groundInst.instanceColor.needsUpdate = true;
+  }
+  drawFlatQr(currentQr);
 }
 
 function generate(){
-  const text = document.getElementById('urlInput').value.trim() || 'https://claude.ai';
+  const text = document.getElementById('urlInput').value.trim() || 'https://github.com/andregil003';
   let qr;
   try {
     qr = qrcode(0, 'M');
     qr.addData(text);
     qr.make();
   } catch(err){ showError('URL muy larga o inválida para QR.'); return; }
+  currentQr = qr;
+  if (pendingTiles) { parseTiles(pendingTiles); pendingTiles = null; }
   animTime = 0;
   buildScene(qr);
   drawFlatQr(qr);
@@ -984,11 +1146,22 @@ function generate(){
     localStorage.setItem('qrtree:url', text);
     localStorage.setItem('qrtree:season', currentSeason);
     localStorage.setItem('qrtree:seed', String(seed));
+    localStorage.setItem('qrtree:style', currentQrStyle);
+    localStorage.setItem('qrtree:canopy', currentCanopy);
+    localStorage.setItem('qrtree:accent', accentColor || '');
+    localStorage.setItem('qrtree:title', document.getElementById('titleInput').value);
   } catch(e){}
   const params = new URLSearchParams();
   params.set('url', text);
   params.set('season', currentSeason);
   params.set('seed', String(seed));
+  params.set('style', currentQrStyle);
+  params.set('canopy', currentCanopy);
+  if (accentColor) params.set('accent', accentColor);
+  const title = document.getElementById('titleInput').value.trim();
+  if (title) params.set('title', title);
+  const tilesStr = serializeTiles();
+  if (tilesStr && tilesStr.length < 1800) params.set('tiles', tilesStr);
   history.replaceState(null, '', '?' + params.toString());
 }
 
@@ -1012,6 +1185,22 @@ function initFromParams(){
     try {
       const savedSeason = localStorage.getItem('qrtree:season');
       if (savedSeason && SEASONS[savedSeason]) setSeason(savedSeason, true);
+    } catch(e){}
+  }
+  const style = params.get('style') || (() => { try { return localStorage.getItem('qrtree:style'); } catch(e){ return null; } })();
+  if (style && QR_STYLES[style]) { currentQrStyle = style; document.getElementById('styleSelect').value = style; }
+  const canopy = params.get('canopy') || (() => { try { return localStorage.getItem('qrtree:canopy'); } catch(e){ return null; } })();
+  if (canopy && CANOPY_STYLES[canopy]) { currentCanopy = canopy; document.getElementById('canopySelect').value = canopy; }
+  const accent = params.get('accent') || (() => { try { return localStorage.getItem('qrtree:accent'); } catch(e){ return null; } })();
+  if (accent && /^#[0-9a-fA-F]{6}$/.test(accent)) { accentColor = accent; document.getElementById('accentColor').value = accent; }
+  const title = params.get('title') || (() => { try { return localStorage.getItem('qrtree:title'); } catch(e){ return null; } })();
+  if (title) document.getElementById('titleInput').value = title;
+  const tilesParam = params.get('tiles');
+  if (tilesParam) pendingTiles = tilesParam;
+  else {
+    try {
+      const savedTiles = localStorage.getItem('qrtree:tiles');
+      if (savedTiles) pendingTiles = savedTiles;
     } catch(e){}
   }
   if (url) {
@@ -1044,7 +1233,7 @@ function saveBlob(blob, filename){
   setTimeout(() => { document.body.removeChild(a); URL.revokeObjectURL(url); }, 1000);
 }
 document.getElementById('copyLinkBtn').addEventListener('click', () => {
-  const text = document.getElementById('urlInput').value.trim() || 'https://claude.ai';
+  const text = document.getElementById('urlInput').value.trim() || 'https://github.com/andregil003';
   const params = new URLSearchParams({ url: text, season: currentSeason, seed: String(seed) });
   const link = location.origin + location.pathname + '?' + params.toString();
   const btn = document.getElementById('copyLinkBtn');
@@ -1092,6 +1281,127 @@ document.getElementById('downloadFlatBtn').addEventListener('click', () => {
     }
   }, 'image/png');
 });
+
+/* ---------- Pixel art: pintar tiles + importar imagen ---------- */
+const flatQrCanvas = document.getElementById('flatQr');
+const paintToggle = document.getElementById('paintToggle');
+paintToggle.addEventListener('click', () => {
+  paintMode = !paintMode;
+  paintToggle.setAttribute('aria-pressed', String(paintMode));
+  paintToggle.textContent = paintMode ? '✅ Pintando…' : '🎨 Pintar tiles';
+  if (paintMode) announce('Modo pintar activado. Haz clic en el QR para colorear tiles.');
+});
+document.getElementById('resetTilesBtn').addEventListener('click', () => {
+  tileColors = null;
+  applyTileColors();
+  saveTiles();
+  announce('Colores de tiles restablecidos');
+});
+flatQrCanvas.addEventListener('click', e => {
+  if (!paintMode || !currentQr) return;
+  const rect = flatQrCanvas.getBoundingClientRect();
+  const x = (e.clientX-rect.left)/rect.width * 180;
+  const y = (e.clientY-rect.top)/rect.height * flatQrCanvas.height;
+  if (y > 180) return;
+  const n = currentQr.getModuleCount();
+  const quiet = 2;
+  const cell = 180/(n+quiet*2);
+  const col = Math.floor((x - quiet*cell)/cell);
+  const row = Math.floor((y - quiet*cell)/cell);
+  if (row<0||col<0||row>=n||col>=n) return;
+  if (!tileColors) tileColors = Array.from({length:n},()=>Array(n).fill(null));
+  const paint = accentColor || SEASONS[currentSeason].qrDark;
+  tileColors[row][col] = tileColors[row][col] === paint ? null : paint;
+  applyTileColors();
+  saveTiles();
+});
+document.getElementById('importImgBtn').addEventListener('click', () => document.getElementById('imageInput').click());
+document.getElementById('imageInput').addEventListener('change', e => {
+  const file = e.target.files[0];
+  if (!file || !currentQr) return;
+  const reader = new FileReader();
+  reader.onload = () => {
+    const img = new Image();
+    img.onload = () => {
+      const n = currentQr.getModuleCount();
+      const c = document.createElement('canvas');
+      c.width = n; c.height = n;
+      const ctx = c.getContext('2d');
+      ctx.drawImage(img, 0, 0, n, n);
+      const data = ctx.getImageData(0,0,n,n).data;
+      tileColors = Array.from({length:n},()=>Array(n).fill(null));
+      for (let r=0; r<n; r++){
+        for (let col=0; col<n; col++){
+          const i=(r*n+col)*4;
+          tileColors[r][col] = '#'+[data[i],data[i+1],data[i+2]].map(v=>v.toString(16).padStart(2,'0')).join('');
+        }
+      }
+      applyTileColors();
+      saveTiles();
+      announce('Imagen importada como pixel art');
+    };
+    img.src = reader.result;
+  };
+  reader.readAsDataURL(file);
+  e.target.value = '';
+});
+
+/* ---------- GIF animado ---------- */
+document.getElementById('downloadGifBtn').addEventListener('click', downloadGif);
+async function downloadGif(){
+  const btn = document.getElementById('downloadGifBtn');
+  const old = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = 'Generando GIF…';
+  try {
+    const season = SEASONS[currentSeason];
+    const W = 480, H = 480;
+    const gif = new GIF({ workers: 2, quality: 10, width: W, height: H, workerScript: 'vendor/gif.worker.js' });
+    const frames = 60;
+    const prevGrowth = growth, prevTarget = growthTarget, prevAnim = animTime;
+    if (rafId) { cancelAnimationFrame(rafId); rafId = 0; }
+    growth = 0; growthTarget = 1;
+    applyGrowth(0, season, true);
+    const srcCanvas = renderer.domElement;
+    const sw = srcCanvas.width, sh = srcCanvas.height;
+    const side = Math.min(sw, sh);
+    const sx = (sw-side)/2, sy = (sh-side)/2;
+    for (let i=0; i<frames; i++){
+      const t = i/(frames-1);
+      growth = t;
+      animTime = prevAnim + t*2.2;
+      applyGrowth(growth, season);
+      updateCamera();
+      composer.render();
+      const c = document.createElement('canvas');
+      c.width = W; c.height = H;
+      const ctx = c.getContext('2d');
+      ctx.drawImage(srcCanvas, sx, sy, side, side, 0, 0, W, H);
+      gif.addFrame(ctx, { copy: true, delay: 50 });
+      btn.textContent = 'Generando GIF… ' + Math.round((i+1)/frames*100) + '%';
+      await new Promise(r => setTimeout(r, 0));
+    }
+    const blob = await new Promise((resolve, reject) => {
+      gif.on('finished', resolve);
+      gif.on('abort', reject);
+      gif.render();
+    });
+    growth = prevGrowth; growthTarget = prevTarget; animTime = prevAnim;
+    applyGrowth(growth, season, true);
+    if (rafId === 0) rafId = requestAnimationFrame(loop);
+    const file = new File([blob], 'arbol-qr.gif', { type: 'image/gif' });
+    if (isMobile && navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) {
+      navigator.share({ files: [file], title: 'Mi árbol QR animado' }).catch(() => {});
+    } else {
+      saveBlob(blob, 'arbol-qr.gif');
+    }
+  } catch(err){
+    showError('No se pudo generar el GIF: ' + err.message);
+    if (rafId === 0) rafId = requestAnimationFrame(loop);
+  }
+  btn.disabled = false;
+  btn.textContent = old;
+}
 
 let lastTime = 0;
 let frameCount = 0;

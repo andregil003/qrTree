@@ -1,5 +1,25 @@
 # Changelog
 
+## [1.2.0] - 2026-09-09
+
+### Added
+- **5 estilos de QR** (suelo 3D + QR plano): Clásico, Redondo, Diamante, Voxel (módulos con altura variable) y Minimal
+- **Color de acento personalizado** para los módulos oscuros del QR (persistente + en la URL)
+- **Pixel art por tile**: modo "Pintar tiles" para colorear cada cuadro del QR haciendo clic, con botón restablecer
+- **Importar imagen**: sube una imagen y se convierte en pixel art sobre la grilla del QR
+- **Título de negocio**: texto opcional que se imprime bajo el QR plano
+- **Forma de copa**: Redonda, Piramidal, Paraguas y Llorona (afecta ramas y distribución de hojas)
+- **Rama central vertical** en el árbol: rellena el hueco central que quedaba sobre el tronco
+- **GIF animado**: botón "Descargar GIF" que renderiza el árbol creciendo (~3s, 480px) con gif.js vendored localmente
+- URL por defecto: `https://github.com/andregil003` (fallback del JS)
+
+### Changed
+- El QR plano ahora dibuja todos los tiles (soporta pixel art) y crece en altura si hay título
+- `generate()` persiste estilo, copa, acento, título y tiles (localStorage + URL)
+
+### Fixed
+- Fallback de URL en `generate()` y `copyLinkBtn` apuntaba a `claude.ai` → ahora `github.com/andregil003`
+
 ## [1.1.0] - 2026-09-09
 
 ### Added
