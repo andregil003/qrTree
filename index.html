@@ -6,16 +6,16 @@
 <meta name="theme-color" content="#f6f1e7">
 <link rel="manifest" href="manifest.webmanifest">
 <title>Árbol de Bloques — Generador de QR 3D</title>
-<!-- qrTree v1.0.0 -->
-<meta name="description" content="Genera un QR 3D con un árbol procedural que crece sobre tu código. 4 temporadas, descarga PNG y comparte tu árbol con un enlace.">
+<!-- qrTree v1.3.0 -->
+<meta name="description" content="Genera un QR 3D con un árbol procedural que crece sobre tu código. Estilos, pixel art, GIF animado y modo escaneo.">
 <meta property="og:title" content="Árbol de Bloques — Generador de QR 3D">
-<meta property="og:description" content="Convierte cualquier enlace en un árbol voxelizado que crece sobre tu código QR real. 4 temporadas y árboles únicos con semilla.">
+<meta property="og:description" content="Convierte cualquier enlace en un árbol voxelizado que crece sobre tu código QR real. 4 temporadas, estilos, pixel art y GIF.">
 <meta property="og:type" content="website">
 <meta property="og:url" content="https://andregil003.github.io/qrTree/">
 <meta name="twitter:card" content="summary">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🌳</text></svg>">
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,600;1,9..144,500&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,600;1,9..144,500&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 <script src="vendor/three.min.js"></script>
 <script src="vendor/CopyShader.js"></script>
 <script src="vendor/LuminosityHighPassShader.js"></script>
@@ -32,6 +32,9 @@
   :root{
     --bg:#f6f1e7; --ink:#2b2318; --ink-soft:#6b5f4f;
     --panel:#fffdf8; --line:rgba(43,35,24,0.12); --accent:#c97a3d;
+    --shadow:0 1px 2px rgba(43,35,24,0.04), 0 8px 24px rgba(43,35,24,0.06);
+    --shadow-lg:0 2px 4px rgba(43,35,24,0.06), 0 20px 48px rgba(43,35,24,0.12);
+    --radius:16px;
   }
   *{box-sizing:border-box;}
   html,body{margin:0;height:100%;}
@@ -40,99 +43,263 @@
     font-family:'Inter',sans-serif; color:var(--ink);
     display:flex; flex-direction:column; min-height:100vh;
   }
-  header{ padding: 26px clamp(20px,4vw,48px) 6px; }
-  h1{ font-family:'Fraunces',serif; font-weight:600; font-size:clamp(26px,4vw,36px); margin:0 0 6px; letter-spacing:-0.01em; }
-  header p{ margin:0; color:var(--ink-soft); font-size:14.5px; max-width:540px; line-height:1.5; }
-  main{ flex:1; display:grid; grid-template-columns:300px 1fr; gap:0; padding:12px clamp(20px,4vw,48px) clamp(20px,4vw,48px); }
-  @media (max-width:880px){ main{ grid-template-columns:1fr; } .panel{ order:2; padding:16px; } .stage{ order:1; } }
-  .panel{ background:var(--panel); border:1px solid var(--line); border-radius:18px; padding:20px; height:fit-content; display:flex; flex-direction:column; gap:18px; }
-  .field label{ display:block; font-size:13px; font-weight:600; margin-bottom:8px; }
-  .field input[type=text]{ width:100%; padding:11px 12px; border-radius:10px; border:1px solid var(--line); font-family:'Inter',sans-serif; font-size:14px; background:#fff; color:var(--ink); }
-  .field input[type=text]:focus{ outline:2px solid var(--accent); outline-offset:1px; }
-  .field select{ width:100%; padding:10px 12px; border-radius:10px; border:1px solid var(--line); font-family:'Inter',sans-serif; font-size:14px; background:#fff; color:var(--ink); }
-  .field input[type=color]{ width:100%; height:42px; padding:4px; border-radius:10px; border:1px solid var(--line); background:#fff; cursor:pointer; }
-  .pixelart-row{ display:flex; gap:8px; }
-  .pixelart-row button{ flex:1; }
+  body.modal-open{ overflow:hidden; }
+
+  /* ---------- Header ---------- */
+  header{
+    position:sticky; top:0; z-index:50;
+    display:flex; align-items:center; justify-content:space-between; gap:16px;
+    padding:14px clamp(20px,4vw,48px);
+    background:rgba(246,241,231,0.82); backdrop-filter:blur(12px);
+    border-bottom:1px solid var(--line);
+  }
+  .brand{ display:flex; align-items:center; gap:12px; }
+  .brand-mark{
+    width:40px; height:40px; border-radius:12px; flex-shrink:0;
+    background:linear-gradient(135deg, #2e7d32, #43a047);
+    display:flex; align-items:center; justify-content:center;
+    font-size:20px; box-shadow:0 4px 12px rgba(46,125,50,0.25);
+  }
+  .brand h1{ font-family:'Fraunces',serif; font-weight:600; font-size:19px; margin:0; letter-spacing:-0.01em; }
+  .brand p{ margin:0; font-size:12px; color:var(--ink-soft); }
+  .tabs{ display:flex; gap:4px; background:rgba(43,35,24,0.05); padding:4px; border-radius:12px; }
+  .tab{
+    border:none; background:transparent; color:var(--ink-soft);
+    font-family:'Inter',sans-serif; font-size:13px; font-weight:600;
+    padding:8px 14px; border-radius:9px; cursor:pointer; transition:all .2s;
+  }
+  .tab:hover{ color:var(--ink); }
+  .tab.active{ background:#fff; color:var(--ink); box-shadow:0 1px 3px rgba(43,35,24,0.12); }
+
+  /* ---------- Layout ---------- */
+  main{ flex:1; padding:20px clamp(20px,4vw,48px) clamp(20px,4vw,48px); }
+  .view{ display:none; }
+  .view.active{ display:grid; gap:18px; animation:viewIn .25s ease; }
+  @keyframes viewIn{ from{ opacity:0; transform:translateY(6px); } to{ opacity:1; transform:none; } }
+  #view-crear{ grid-template-columns:320px 1fr; }
+  #view-personalizar, #view-exportar{ grid-template-columns:minmax(0,1fr) minmax(0,1fr); align-items:start; }
+  @media (max-width:880px){
+    #view-crear{ grid-template-columns:1fr; }
+    #view-personalizar, #view-exportar{ grid-template-columns:1fr; }
+    header{ flex-direction:column; align-items:stretch; }
+    .tabs{ justify-content:center; }
+  }
+
+  /* ---------- Panel ---------- */
+  .panel{
+    background:var(--panel); border:1px solid var(--line); border-radius:var(--radius);
+    padding:22px; display:flex; flex-direction:column; gap:16px;
+    box-shadow:var(--shadow);
+  }
+  .panel h2{ font-family:'Fraunces',serif; font-size:17px; font-weight:600; margin:0 0 2px; }
+  .panel .sub{ margin:0 0 4px; font-size:12.5px; color:var(--ink-soft); line-height:1.5; }
+  .field label{ display:block; font-size:12px; font-weight:600; margin-bottom:7px; letter-spacing:0.01em; }
+  .field input[type=text]{
+    width:100%; padding:11px 12px; border-radius:10px; border:1px solid var(--line);
+    font-family:'Inter',sans-serif; font-size:14px; background:#fff; color:var(--ink); transition:border-color .2s;
+  }
+  .field input[type=text]:focus{ outline:none; border-color:var(--accent); box-shadow:0 0 0 3px rgba(201,122,61,0.12); }
+  .field select{
+    width:100%; padding:10px 12px; border-radius:10px; border:1px solid var(--line);
+    font-family:'Inter',sans-serif; font-size:14px; background:#fff; color:var(--ink);
+  }
+  .field input[type=color]{ width:100%; height:44px; padding:4px; border-radius:10px; border:1px solid var(--line); background:#fff; cursor:pointer; }
   .seasons{ display:grid; grid-template-columns:1fr 1fr; gap:8px; }
-  .season-btn{ border:1px solid var(--line); background:#fff; border-radius:12px; padding:10px 8px; font-size:13px; font-weight:500; cursor:pointer; display:flex; align-items:center; gap:8px; color:var(--ink); transition:all .2s; }
+  .season-btn{
+    border:1px solid var(--line); background:#fff; border-radius:12px; padding:10px 8px;
+    font-size:13px; font-weight:500; cursor:pointer; display:flex; align-items:center; gap:8px;
+    color:var(--ink); transition:all .2s;
+  }
   .season-btn .dot{ width:10px; height:10px; border-radius:50%; flex-shrink:0; }
   .season-btn.active{ border-color:var(--ink); background:#f4efe3; transform:scale(0.98); }
-  .generate-btn{ width:100%; padding:13px; border-radius:12px; border:none; background:var(--ink); color:#fdf9f0; font-weight:600; font-size:14px; cursor:pointer; transition:opacity .2s; }
-  .generate-btn:hover{ opacity:.92; }
+  .generate-btn{
+    width:100%; padding:13px; border-radius:12px; border:none;
+    background:var(--ink); color:#fdf9f0; font-weight:600; font-size:14px; cursor:pointer;
+    transition:all .2s;
+  }
+  .generate-btn:hover{ background:#3d3226; transform:translateY(-1px); box-shadow:0 4px 12px rgba(43,35,24,0.2); }
   .divider{ height:1px; background:var(--line); }
-  .ghost-btn{ width:100%; padding:11px; border-radius:12px; border:1px solid var(--line); background:#fff; color:var(--ink); font-weight:500; font-size:13px; cursor:pointer; transition:all .2s; }
-  .ghost-btn:hover{ background:#faf8f3; }
+  .ghost-btn{
+    width:100%; padding:11px; border-radius:12px; border:1px solid var(--line);
+    background:#fff; color:var(--ink); font-weight:500; font-size:13px; cursor:pointer; transition:all .2s;
+  }
+  .ghost-btn:hover{ background:#faf8f3; border-color:rgba(43,35,24,0.25); }
+  .ghost-btn:disabled{ opacity:0.55; cursor:not-allowed; }
+  .pixelart-row{ display:flex; gap:8px; }
+  .pixelart-row button{ flex:1; }
   .error-msg{ font-size:12.5px; color:#b3261e; background:#fdecea; border:1px solid #f5c6c0; border-radius:10px; padding:9px 12px; margin:0; line-height:1.4; }
+  .warn-msg{ font-size:12.5px; color:#8a5a00; background:#fff7e0; border:1px solid #f0dfa8; border-radius:10px; padding:9px 12px; margin:0; line-height:1.4; }
   .flatqr-wrap{ display:flex; flex-direction:column; align-items:center; gap:10px; }
-  .flatqr-wrap canvas{ border-radius:8px; border:1px solid var(--line); width:100%; max-width:220px; height:auto; }
+  .flatqr-wrap canvas{ border-radius:8px; border:1px solid var(--line); width:100%; max-width:220px; height:auto; background:#fff; }
   .flatqr-note{ font-size:12px; color:var(--ink-soft); text-align:center; line-height:1.4; }
-  .stage{ position:relative; border-radius:18px; overflow:hidden; min-height:520px; margin-left:16px; border:1px solid var(--line); cursor:grab; display:flex; flex-direction:column; background: linear-gradient(180deg, #fbf7ef 0%, #f0ebe0 100%); }
-  @media (max-width:880px){ .stage{ margin-left:0; margin-top:0; min-height:56vh; } }
+
+  /* ---------- Stage ---------- */
+  .stage{
+    position:relative; border-radius:var(--radius); overflow:hidden;
+    min-height:520px; border:1px solid var(--line); cursor:grab;
+    display:flex; flex-direction:column;
+    background: linear-gradient(180deg, #fbf7ef 0%, #f0ebe0 100%);
+    box-shadow:var(--shadow);
+  }
+  @media (max-width:880px){ .stage{ min-height:56vh; } }
   .stage:active{ cursor:grabbing; }
   .canvas-wrap{ position:relative; flex:1; touch-action:none; }
   .canvas-wrap canvas{ display:block; width:100%; height:100%; }
-  .badge{ position:absolute; top:14px; left:14px; font-size:12px; font-weight:600; background:rgba(255,255,255,0.85); backdrop-filter:blur(8px); padding:6px 14px; border-radius:999px; pointer-events:none; box-shadow:0 2px 8px rgba(0,0,0,0.04); transition:all .3s; }
-  .hint{ position:absolute; bottom:14px; left:50%; transform:translateX(-50%); font-size:12px; color:rgba(43,35,24,0.5); background:rgba(255,255,255,0.7); padding:6px 14px; border-radius:999px; backdrop-filter:blur(4px); pointer-events:none; }
+  .badge{
+    position:absolute; top:14px; left:14px; font-size:12px; font-weight:600;
+    background:rgba(255,255,255,0.85); backdrop-filter:blur(8px);
+    padding:6px 14px; border-radius:999px; pointer-events:none;
+    box-shadow:0 2px 8px rgba(0,0,0,0.04); transition:all .3s;
+  }
+  .hint{
+    position:absolute; bottom:14px; left:50%; transform:translateX(-50%);
+    font-size:12px; color:rgba(43,35,24,0.5); background:rgba(255,255,255,0.7);
+    padding:6px 14px; border-radius:999px; backdrop-filter:blur(4px); pointer-events:none;
+  }
   .stage-actions{ display:flex; gap:10px; padding:14px; background:var(--panel); border-top:1px solid var(--line); flex-wrap:wrap; }
-  .stage-actions button{ flex:1; min-width:140px; padding:11px; border-radius:12px; font-weight:600; font-size:13px; cursor:pointer; border:1px solid var(--line); background:#fff; color:var(--ink); transition:all .2s; }
+  .stage-actions button{
+    flex:1; min-width:130px; padding:11px; border-radius:12px; font-weight:600; font-size:13px;
+    cursor:pointer; border:1px solid var(--line); background:#fff; color:var(--ink); transition:all .2s;
+  }
   .stage-actions button:hover{ transform:translateY(-1px); box-shadow:0 4px 12px rgba(0,0,0,0.06); }
   .stage-actions .primary{ background:var(--ink); color:#fdf9f0; border-color:var(--ink); }
   .stage-actions .primary:hover{ background:#3d3226; }
+  .stage-actions .scan{ background:var(--accent); color:#fff; border-color:var(--accent); }
+  .stage-actions .scan:hover{ background:#b56a2e; }
+
+  /* ---------- Export cards ---------- */
+  .export-grid{ display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+  @media (max-width:560px){ .export-grid{ grid-template-columns:1fr; } }
+  .export-card{
+    border:1px solid var(--line); border-radius:14px; padding:16px;
+    background:#fff; display:flex; flex-direction:column; gap:10px; transition:all .2s;
+  }
+  .export-card:hover{ box-shadow:var(--shadow); transform:translateY(-1px); }
+  .export-card .icon{ font-size:26px; }
+  .export-card h3{ margin:0; font-size:14px; font-weight:600; }
+  .export-card p{ margin:0; font-size:12.5px; color:var(--ink-soft); line-height:1.5; flex:1; }
+
+  /* ---------- Modal escanear ---------- */
+  .modal{
+    position:fixed; inset:0; z-index:100; display:flex; align-items:center; justify-content:center;
+    background:rgba(43,35,24,0.55); backdrop-filter:blur(6px); padding:24px;
+  }
+  .modal[hidden]{ display:none; }
+  .modal-content{
+    background:var(--panel); border-radius:20px; padding:28px;
+    box-shadow:var(--shadow-lg); display:flex; flex-direction:column; align-items:center; gap:14px;
+    max-width:min(92vw, 640px); width:100%;
+    animation:modalIn .25s ease;
+  }
+  @keyframes modalIn{ from{ opacity:0; transform:scale(0.96); } to{ opacity:1; transform:none; } }
+  .modal-content canvas{ width:100%; max-width:480px; height:auto; border-radius:12px; border:1px solid var(--line); background:#fff; }
+  .modal-content h2{ font-family:'Fraunces',serif; font-size:20px; margin:0; }
+  .modal-content p{ margin:0; font-size:13px; color:var(--ink-soft); text-align:center; }
+  .modal-close{
+    align-self:flex-end; border:none; background:rgba(43,35,24,0.06); color:var(--ink);
+    width:34px; height:34px; border-radius:50%; font-size:15px; cursor:pointer; transition:all .2s;
+  }
+  .modal-close:hover{ background:rgba(43,35,24,0.12); }
+
   .sr-only{ position:absolute; width:1px; height:1px; padding:0; margin:-1px; overflow:hidden; clip:rect(0,0,0,0); white-space:nowrap; border:0; }
 </style>
 </head>
 <body>
 
 <header>
-  <h1>Árbol de Bloques</h1>
-  <p>El suelo es tu código QR real. La grama crece en sus módulos oscuros y del centro brota un árbol procedural.</p>
+  <div class="brand">
+    <div class="brand-mark">🌳</div>
+    <div>
+      <h1>Árbol de Bloques</h1>
+      <p>Tu código QR, convertido en un árbol vivo</p>
+    </div>
+  </div>
+  <nav class="tabs" aria-label="Secciones">
+    <button class="tab active" data-view="crear">🌳 Crear</button>
+    <button class="tab" data-view="personalizar">🎨 Personalizar</button>
+    <button class="tab" data-view="exportar">📤 Exportar</button>
+  </nav>
 </header>
 
 <main>
-  <div class="panel">
-    <div class="field">
-      <label for="urlInput">Tu enlace</label>
-      <input type="text" id="urlInput" value="https://github.com/andregil003" placeholder="https://tuenlace.com" />
+  <!-- ============ VISTA CREAR ============ -->
+  <section class="view active" id="view-crear">
+    <div class="panel">
+      <div class="field">
+        <label for="urlInput">Tu enlace</label>
+        <input type="text" id="urlInput" value="https://github.com/andregil003" placeholder="https://tuenlace.com" />
+      </div>
+
+      <div class="field">
+        <label>Temporada</label>
+        <div class="seasons" id="seasonPicker"></div>
+      </div>
+
+      <button class="generate-btn" id="generateBtn">Generar árbol</button>
+
+      <button class="ghost-btn" id="randomBtn">🎲 Nuevo árbol aleatorio</button>
+      <button class="ghost-btn" id="copyLinkBtn">🔗 Copiar enlace</button>
+      <p id="errorMsg" class="error-msg" role="alert" hidden></p>
+      <p id="warnMsg" class="warn-msg" hidden></p>
     </div>
 
-    <div class="field">
-      <label>Temporada</label>
-      <div class="seasons" id="seasonPicker"></div>
+    <div class="stage" id="stage">
+      <div class="canvas-wrap" id="canvasWrap" role="img" aria-label="Escena 3D del árbol de bloques sobre tu código QR">
+        <div class="badge" id="modeBadge">🌳 Árbol</div>
+        <div class="hint" id="hint">Arrastra para girar · rueda para acercar</div>
+      </div>
+      <div class="stage-actions">
+        <button class="primary" id="toggleGrowBtn">Aplanar a QR</button>
+        <button class="scan" id="scanBtn">📱 Escanear</button>
+        <button id="visitLinkBtn">Visitar enlace</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ VISTA PERSONALIZAR ============ -->
+  <section class="view" id="view-personalizar">
+    <div class="panel">
+      <h2>Estilo del QR</h2>
+      <p class="sub">Cambia la forma de los módulos en el suelo 3D y en el QR plano.</p>
+
+      <div class="field">
+        <label for="styleSelect">Estilo de QR</label>
+        <select id="styleSelect">
+          <option value="clasico">Clásico</option>
+          <option value="redondo">Redondo</option>
+          <option value="diamante">Diamante</option>
+          <option value="voxel">Voxel</option>
+          <option value="minimal">Minimal</option>
+        </select>
+      </div>
+
+      <div class="field">
+        <label for="canopySelect">Forma de copa</label>
+        <select id="canopySelect">
+          <option value="redonda">Redonda</option>
+          <option value="piramidal">Piramidal</option>
+          <option value="paraguas">Paraguas</option>
+          <option value="llorona">Llorona</option>
+        </select>
+      </div>
+
+      <div class="divider"></div>
+
+      <div class="field">
+        <label for="accentColor">Color de acento (módulos oscuros)</label>
+        <input type="color" id="accentColor" value="#1b5e20">
+      </div>
+
+      <div class="field">
+        <label for="titleInput">Título (opcional, se imprime bajo el QR)</label>
+        <input type="text" id="titleInput" placeholder="Nombre de tu negocio" />
+      </div>
     </div>
 
-    <div class="field">
-      <label for="styleSelect">Estilo de QR</label>
-      <select id="styleSelect">
-        <option value="clasico">Clásico</option>
-        <option value="redondo">Redondo</option>
-        <option value="diamante">Diamante</option>
-        <option value="voxel">Voxel</option>
-        <option value="minimal">Minimal</option>
-      </select>
-    </div>
+    <div class="panel">
+      <h2>Pixel art</h2>
+      <p class="sub">Pinta cada cuadro del QR o importa una imagen para convertirla en pixel art.</p>
 
-    <div class="field">
-      <label for="canopySelect">Forma de copa</label>
-      <select id="canopySelect">
-        <option value="redonda">Redonda</option>
-        <option value="piramidal">Piramidal</option>
-        <option value="paraguas">Paraguas</option>
-        <option value="llorona">Llorona</option>
-      </select>
-    </div>
-
-    <div class="field">
-      <label for="accentColor">Color de acento (módulos oscuros)</label>
-      <input type="color" id="accentColor" value="#1b5e20">
-    </div>
-
-    <div class="field">
-      <label for="titleInput">Título (opcional, se imprime bajo el QR)</label>
-      <input type="text" id="titleInput" placeholder="Nombre de tu negocio" />
-    </div>
-
-    <div class="field">
-      <label>Pixel art</label>
       <div class="pixelart-row">
         <button class="ghost-btn" id="paintToggle" aria-pressed="false">🎨 Pintar tiles</button>
         <button class="ghost-btn" id="resetTilesBtn">🧹 Restablecer</button>
@@ -140,39 +307,69 @@
       <input type="file" id="imageInput" accept="image/*" hidden>
       <button class="ghost-btn" id="importImgBtn">🖼️ Importar imagen</button>
       <p class="flatqr-note">Activa "Pintar tiles" y haz clic en el QR para colorear cada cuadro con el color de acento.</p>
+
+      <div class="divider"></div>
+
+      <div class="flatqr-wrap">
+        <canvas id="flatQr" width="180" height="180"></canvas>
+        <p class="flatqr-note">Vista previa del QR plano (quiet zone de 4 módulos, listo para escanear).</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ VISTA EXPORTAR ============ -->
+  <section class="view" id="view-exportar">
+    <div class="panel">
+      <h2>Descargas</h2>
+      <p class="sub">Exporta tu árbol para imprimir, publicar o compartir.</p>
+      <div class="export-grid">
+        <div class="export-card">
+          <div class="icon">🖼️</div>
+          <h3>Imagen de la escena</h3>
+          <p>El árbol 3D completo con el QR de fondo, hasta 2K.</p>
+          <button class="ghost-btn" id="downloadTreeBtn">Descargar PNG</button>
+        </div>
+        <div class="export-card">
+          <div class="icon">🎞️</div>
+          <h3>GIF animado</h3>
+          <p>El árbol creciendo desde cero, perfecto para redes.</p>
+          <button class="ghost-btn" id="downloadGifBtn">Descargar GIF</button>
+        </div>
+        <div class="export-card">
+          <div class="icon">▦</div>
+          <h3>QR plano</h3>
+          <p>El código QR limpio, con título si lo pusiste.</p>
+          <button class="ghost-btn" id="downloadFlatBtn">Descargar QR</button>
+        </div>
+        <div class="export-card">
+          <div class="icon">🔗</div>
+          <h3>Enlace compartible</h3>
+          <p>Guarda URL, temporada, estilo, colores y pixel art.</p>
+          <button class="ghost-btn" id="copyLinkBtn2">Copiar enlace</button>
+        </div>
+      </div>
     </div>
 
-    <button class="generate-btn" id="generateBtn">Generar árbol</button>
-
-    <button class="ghost-btn" id="randomBtn">🎲 Nuevo árbol aleatorio</button>
-    <button class="ghost-btn" id="copyLinkBtn">🔗 Copiar enlace</button>
-    <p id="errorMsg" class="error-msg" role="alert" hidden></p>
-
-    <div class="divider"></div>
-
-    <button class="ghost-btn" id="downloadTreeBtn">Descargar imagen de la escena</button>
-    <button class="ghost-btn" id="downloadGifBtn">🎞️ Descargar GIF animado</button>
-
-    <div class="divider"></div>
-
-    <div class="flatqr-wrap">
-      <canvas id="flatQr" width="180" height="180"></canvas>
-      <p class="flatqr-note">QR real listo para escanear con la cámara.</p>
-      <button class="ghost-btn" id="downloadFlatBtn">Descargar QR</button>
+    <div class="panel">
+      <h2>Vista previa</h2>
+      <p class="sub">Así se ve tu QR plano actual.</p>
+      <div class="flatqr-wrap">
+        <canvas id="flatQrBig" width="360" height="360"></canvas>
+        <button class="ghost-btn" id="scanBtn2">📱 Abrir modo escaneo</button>
+      </div>
     </div>
-  </div>
-
-  <div class="stage" id="stage">
-    <div class="canvas-wrap" id="canvasWrap" role="img" aria-label="Escena 3D del árbol de bloques sobre tu código QR">
-      <div class="badge" id="modeBadge">🌳 Árbol</div>
-      <div class="hint" id="hint">Arrastra para girar · rueda para acercar</div>
-    </div>
-    <div class="stage-actions">
-      <button class="primary" id="toggleGrowBtn">Aplanar a QR</button>
-      <button id="visitLinkBtn">Visitar enlace</button>
-    </div>
-  </div>
+  </section>
 </main>
+
+<!-- Modal escanear -->
+<div class="modal" id="scanModal" hidden role="dialog" aria-modal="true" aria-label="Modo escaneo">
+  <div class="modal-content">
+    <button class="modal-close" aria-label="Cerrar">✕</button>
+    <h2>Escanea con tu cámara</h2>
+    <canvas id="scanQr" width="600" height="600"></canvas>
+    <p>Apunta la cámara de tu teléfono al código. El árbol se aplana automáticamente para que el QR quede visible.</p>
+  </div>
+</div>
 
 <div id="liveRegion" class="sr-only" aria-live="polite"></div>
 
@@ -267,12 +464,32 @@ document.getElementById('urlInput').addEventListener('keydown', e => { if (e.key
 document.getElementById('generateBtn').addEventListener('click', generate);
 document.getElementById('styleSelect').addEventListener('change', e => { currentQrStyle = e.target.value; generate(); });
 document.getElementById('canopySelect').addEventListener('change', e => { currentCanopy = e.target.value; generate(); });
-document.getElementById('accentColor').addEventListener('input', e => { accentColor = e.target.value; if (currentQr) applyTileColors(); });
-document.getElementById('titleInput').addEventListener('input', () => { if (currentQr) drawFlatQr(currentQr); });
-document.getElementById('visitLinkBtn').addEventListener('click', () => {
-  const v = document.getElementById('urlInput').value.trim();
-  if (v) window.open(v.match(/^https?:\/\//) ? v : 'https://' + v, '_blank', 'noopener');
-});
+document.getElementById('accentColor').addEventListener('input', e => { accentColor = e.target.value; checkContrast(); if (currentQr) applyTileColors(); });
+document.getElementById('titleInput').addEventListener('input', () => { if (currentQr) { drawFlatQr(currentQr); drawFlatQrBig(currentQr); } });
+
+/* ---------- Contraste (WCAG) ---------- */
+function luminance(hex){
+  const c = hex.replace('#','');
+  const r = parseInt(c.substr(0,2),16)/255, g = parseInt(c.substr(2,2),16)/255, b = parseInt(c.substr(4,2),16)/255;
+  const lin = v => v <= 0.03928 ? v/12.92 : Math.pow((v+0.055)/1.055, 2.4);
+  return 0.2126*lin(r) + 0.7152*lin(g) + 0.0722*lin(b);
+}
+function contrastRatio(a, b){
+  const l1 = luminance(a), l2 = luminance(b);
+  return (Math.max(l1,l2)+0.05)/(Math.min(l1,l2)+0.05);
+}
+function checkContrast(){
+  const warn = document.getElementById('warnMsg');
+  const season = SEASONS[currentSeason];
+  const dark = accentColor || season.qrDark;
+  const ratio = contrastRatio(dark, season.qrBase);
+  if (ratio < 4.5){
+    warn.textContent = '⚠️ Contraste bajo (' + ratio.toFixed(1) + ':1). El QR puede no escanear. Usa un color más oscuro (mínimo 4.5:1, ideal 7:1).';
+    warn.hidden = false;
+  } else {
+    warn.hidden = true;
+  }
+}
 
 /* ---------- Three.js ---------- */
 const canvasWrap = document.getElementById('canvasWrap');
@@ -404,7 +621,6 @@ function resize(){
   composer.setSize(w, h);
   bloomPass.setSize(Math.max(1, Math.floor(w/(isMobile?4:2))), Math.max(1, Math.floor(h/(isMobile?4:2))));
   const a = w/h;
-  // En portrait, asegurar que el contenido (QR ~8u) quepa en el ancho visible
   const s = a < 1 ? Math.max(camera.top, 5/a) : camera.top;
   camera.left = -s*a; camera.right = s*a; camera.top = s; camera.bottom = -s;
   camera.updateProjectionMatrix();
@@ -414,7 +630,7 @@ window.addEventListener('resize', resize);
 // Keyboard contract: flechas orbitan, +/- zoom
 window.addEventListener('keydown', e => {
   const tag = e.target && e.target.tagName;
-  if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'BUTTON') return;
+  if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'BUTTON' || tag === 'SELECT') return;
   const step = 0.08;
   if (e.key === 'ArrowLeft') theta -= step;
   else if (e.key === 'ArrowRight') theta += step;
@@ -554,7 +770,6 @@ function generateTree(season){
     const rot = quatFromDir(dir);
     const thick = 0.75 * (1 - t*0.45);
     
-    // Llenado denso: grid circular de cubos pequeños
     const fillUnit = unit * 0.35;
     const rSteps = Math.max(1, Math.ceil(thick / fillUnit));
     for (let rx=-rSteps; rx<=rSteps; rx++){
@@ -596,7 +811,6 @@ function generateTree(season){
       const rot = quatFromDir(segDir);
       const thick = thickness * (1 - t*0.08);
       
-      // Llenado denso circular
       const fillUnit = unit * 0.32;
       const rSteps = Math.max(1, Math.ceil(thick / fillUnit));
       for (let rx=-rSteps; rx<=rSteps; rx++){
@@ -825,14 +1039,12 @@ function buildScene(qr){
           const voxH = voxelH[row+','+col] || 1;
           const baseY = groundH + (voxH-1)*groundH*1.15 + unit*0.15;
           
-          // Tallo delgado
           grassPieces.push({
             x: gx, y: baseY + h*0.25, z: gz,
             sx: unit*0.1, sy: h*0.45, sz: unit*0.1,
             rot: new THREE.Quaternion(), colorIdx, delay: 0
           });
           
-          // Hoja de grama (plana y rotada)
           const bladeRot = new THREE.Quaternion().setFromEuler(new THREE.Euler(rand(-0.5,0.5), rand(-0.8,0.8), 0));
           grassPieces.push({
             x: gx, y: baseY + h*0.65, z: gz,
@@ -840,7 +1052,6 @@ function buildScene(qr){
             rot: bladeRot, colorIdx, delay: 0
           });
           
-          // Segunda hoja ocasional
           if (rng() > 0.5) {
             const b2 = new THREE.Quaternion().setFromEuler(new THREE.Euler(rand(-0.4,0.4), rand(-1.0,1.0), rand(-0.3,0.3)));
             grassPieces.push({
@@ -923,7 +1134,6 @@ function applyGrowth(g, season, immediate=false){
   const popDur = 2.2;
   const staticChanged = immediate || Math.abs(g - lastStaticGrowth) > 0.0005;
   
-  // Madera / decoraciones / marcas — SOLO cuando cambia el crecimiento
   if (staticChanged){
     woodPieces.forEach((c,i)=>{
       let lt=1;
@@ -1030,22 +1240,20 @@ function applyGrowth(g, season, immediate=false){
   fallenInst.instanceMatrix.needsUpdate = true;
 }
 
-/* ---------- QR plano ---------- */
-function drawFlatQr(qr){
-  const canvas = document.getElementById('flatQr');
+/* ---------- QR plano (quiet zone ISO: 4 módulos) ---------- */
+function drawQrCanvas(canvas, qr, size, withTitle){
   const ctx = canvas.getContext('2d');
   const season = SEASONS[currentSeason];
   const n = qr.getModuleCount();
-  const quiet = 2;
-  const title = document.getElementById('titleInput').value.trim();
-  const titleH = title ? 34 : 0;
-  const qrSize = 180;
-  canvas.width = qrSize;
-  canvas.height = qrSize + titleH;
-  const cell = qrSize/(n+quiet*2);
+  const quiet = 4;
+  const title = withTitle ? document.getElementById('titleInput').value.trim() : '';
+  const titleH = title ? Math.round(size*0.18) : 0;
+  canvas.width = size;
+  canvas.height = size + titleH;
+  const cell = size/(n+quiet*2);
   const darkColor = accentColor || season.qrDark;
   ctx.fillStyle = season.qrBase;
-  ctx.fillRect(0,0,qrSize,qrSize);
+  ctx.fillRect(0,0,size,size);
   for (let row=0; row<n; row++){
     for (let col=0; col<n; col++){
       const dark = qr.isDark(row,col);
@@ -1074,13 +1282,20 @@ function drawFlatQr(qr){
   }
   if (title){
     ctx.fillStyle = season.qrDark;
-    ctx.font = '600 15px Inter, sans-serif';
+    ctx.font = '600 ' + Math.round(size*0.07) + 'px Inter, sans-serif';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.fillText(title, qrSize/2, qrSize + titleH/2);
+    ctx.fillText(title, size/2, size + titleH/2);
   }
 }
+function drawFlatQr(qr){
+  drawQrCanvas(document.getElementById('flatQr'), qr, 180, true);
+}
+function drawFlatQrBig(qr){
+  drawQrCanvas(document.getElementById('flatQrBig'), qr, 360, true);
+}
 
+/* ---------- Tiles / pixel art ---------- */
 function serializeTiles(){
   if (!tileColors) return '';
   const parts = [];
@@ -1126,13 +1341,17 @@ function applyTileColors(){
     if (groundInst.instanceColor) groundInst.instanceColor.needsUpdate = true;
   }
   drawFlatQr(currentQr);
+  drawFlatQrBig(currentQr);
 }
 
+/* ---------- Generar ---------- */
 function generate(){
   const text = document.getElementById('urlInput').value.trim() || 'https://github.com/andregil003';
   let qr;
   try {
-    qr = qrcode(0, 'M');
+    // Q por defecto; H si hay pixel art (más robusto ante daños)
+    const ecLevel = tileColors ? 'H' : 'Q';
+    qr = qrcode(0, ecLevel);
     qr.addData(text);
     qr.make();
   } catch(err){ showError('URL muy larga o inválida para QR.'); return; }
@@ -1141,6 +1360,8 @@ function generate(){
   animTime = 0;
   buildScene(qr);
   drawFlatQr(qr);
+  drawFlatQrBig(qr);
+  checkContrast();
   announce('Árbol generado para ' + text);
   try {
     localStorage.setItem('qrtree:url', text);
@@ -1213,7 +1434,7 @@ function initFromParams(){
   }
 }
 
-document.getElementById('randomBtn').addEventListener('click', () => { newSeed(); generate(); });
+/* ---------- Compartir / descargas ---------- */
 function copyToClipboard(text){
   if (navigator.clipboard && navigator.clipboard.writeText) return navigator.clipboard.writeText(text);
   return new Promise((resolve, reject) => {
@@ -1232,18 +1453,38 @@ function saveBlob(blob, filename){
   a.click();
   setTimeout(() => { document.body.removeChild(a); URL.revokeObjectURL(url); }, 1000);
 }
-document.getElementById('copyLinkBtn').addEventListener('click', () => {
+function buildShareLink(){
   const text = document.getElementById('urlInput').value.trim() || 'https://github.com/andregil003';
   const params = new URLSearchParams({ url: text, season: currentSeason, seed: String(seed) });
-  const link = location.origin + location.pathname + '?' + params.toString();
-  const btn = document.getElementById('copyLinkBtn');
-  const old = btn.textContent;
-  const done = () => { btn.textContent = '✅ ¡Enlace copiado!'; setTimeout(() => btn.textContent = old, 2000); };
-  if (isMobile && navigator.share){
-    navigator.share({ title: 'Mi árbol QR', text: 'Mira mi árbol QR', url: link }).then(done).catch(() => {});
-  } else {
-    copyToClipboard(link).then(done).catch(() => showError('No se pudo copiar el enlace.'));
-  }
+  params.set('style', currentQrStyle);
+  params.set('canopy', currentCanopy);
+  if (accentColor) params.set('accent', accentColor);
+  const title = document.getElementById('titleInput').value.trim();
+  if (title) params.set('title', title);
+  const tilesStr = serializeTiles();
+  if (tilesStr && tilesStr.length < 1800) params.set('tiles', tilesStr);
+  return location.origin + location.pathname + '?' + params.toString();
+}
+function wireCopyBtn(btnId){
+  const btn = document.getElementById(btnId);
+  btn.addEventListener('click', () => {
+    const link = buildShareLink();
+    const old = btn.textContent;
+    const done = () => { btn.textContent = '✅ ¡Enlace copiado!'; setTimeout(() => btn.textContent = old, 2000); };
+    if (isMobile && navigator.share){
+      navigator.share({ title: 'Mi árbol QR', text: 'Mira mi árbol QR', url: link }).then(done).catch(() => {});
+    } else {
+      copyToClipboard(link).then(done).catch(() => showError('No se pudo copiar el enlace.'));
+    }
+  });
+}
+wireCopyBtn('copyLinkBtn');
+wireCopyBtn('copyLinkBtn2');
+
+document.getElementById('randomBtn').addEventListener('click', () => { newSeed(); generate(); });
+document.getElementById('visitLinkBtn').addEventListener('click', () => {
+  const v = document.getElementById('urlInput').value.trim();
+  if (v) window.open(v.match(/^https?:\/\//) ? v : 'https://' + v, '_blank', 'noopener');
 });
 
 document.getElementById('downloadTreeBtn').addEventListener('click', () => {
@@ -1270,7 +1511,7 @@ document.getElementById('downloadTreeBtn').addEventListener('click', () => {
   }, 'image/png');
 });
 document.getElementById('downloadFlatBtn').addEventListener('click', () => {
-  const canvas = document.getElementById('flatQr');
+  const canvas = document.getElementById('flatQrBig');
   canvas.toBlob(blob => {
     if (!blob){ showError('No se pudo generar el QR.'); return; }
     const file = new File([blob], 'codigo-qr.png', { type: 'image/png' });
@@ -1304,7 +1545,7 @@ flatQrCanvas.addEventListener('click', e => {
   const y = (e.clientY-rect.top)/rect.height * flatQrCanvas.height;
   if (y > 180) return;
   const n = currentQr.getModuleCount();
-  const quiet = 2;
+  const quiet = 4;
   const cell = 180/(n+quiet*2);
   const col = Math.floor((x - quiet*cell)/cell);
   const row = Math.floor((y - quiet*cell)/cell);
@@ -1346,7 +1587,7 @@ document.getElementById('imageInput').addEventListener('change', e => {
   e.target.value = '';
 });
 
-/* ---------- GIF animado ---------- */
+/* ---------- GIF animado (workers: 0 → funciona en file:// y GitHub Pages) ---------- */
 document.getElementById('downloadGifBtn').addEventListener('click', downloadGif);
 async function downloadGif(){
   const btn = document.getElementById('downloadGifBtn');
@@ -1355,9 +1596,9 @@ async function downloadGif(){
   btn.textContent = 'Generando GIF…';
   try {
     const season = SEASONS[currentSeason];
-    const W = 480, H = 480;
-    const gif = new GIF({ workers: 2, quality: 10, width: W, height: H, workerScript: 'vendor/gif.worker.js' });
-    const frames = 60;
+    const W = 400, H = 400;
+    const gif = new GIF({ workers: 0, quality: 8, width: W, height: H });
+    const frames = 48;
     const prevGrowth = growth, prevTarget = growthTarget, prevAnim = animTime;
     if (rafId) { cancelAnimationFrame(rafId); rafId = 0; }
     growth = 0; growthTarget = 1;
@@ -1377,7 +1618,7 @@ async function downloadGif(){
       c.width = W; c.height = H;
       const ctx = c.getContext('2d');
       ctx.drawImage(srcCanvas, sx, sy, side, side, 0, 0, W, H);
-      gif.addFrame(ctx, { copy: true, delay: 50 });
+      gif.addFrame(ctx, { copy: true, delay: 62 });
       btn.textContent = 'Generando GIF… ' + Math.round((i+1)/frames*100) + '%';
       await new Promise(r => setTimeout(r, 0));
     }
@@ -1403,6 +1644,41 @@ async function downloadGif(){
   btn.textContent = old;
 }
 
+/* ---------- Navegación por vistas ---------- */
+document.querySelectorAll('.tab').forEach(tab => {
+  tab.addEventListener('click', () => {
+    document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t === tab));
+    document.querySelectorAll('.view').forEach(v => v.classList.toggle('active', v.id === 'view-' + tab.dataset.view));
+    window.dispatchEvent(new Event('resize'));
+  });
+});
+
+/* ---------- Modo escaneo (walkthrough) ---------- */
+const scanModal = document.getElementById('scanModal');
+const scanQrCanvas = document.getElementById('scanQr');
+function openScan(){
+  if (!currentQr) return;
+  drawQrCanvas(scanQrCanvas, currentQr, 600, true);
+  scanModal.hidden = false;
+  document.body.classList.add('modal-open');
+  // Aplana el árbol para que el QR quede visible en el 3D
+  growthTarget = 0;
+  toggleBtn.textContent = 'Hacer crecer el árbol';
+  toggleBtn.setAttribute('aria-pressed', 'true');
+  modeBadge.textContent = '▦ QR';
+  announce('Modo escaneo abierto');
+}
+function closeScan(){
+  scanModal.hidden = true;
+  document.body.classList.remove('modal-open');
+}
+document.getElementById('scanBtn').addEventListener('click', openScan);
+document.getElementById('scanBtn2').addEventListener('click', openScan);
+scanModal.addEventListener('click', e => { if (e.target === scanModal) closeScan(); });
+document.querySelector('.modal-close').addEventListener('click', closeScan);
+document.addEventListener('keydown', e => { if (e.key === 'Escape' && !scanModal.hidden) closeScan(); });
+
+/* ---------- Loop ---------- */
 let lastTime = 0;
 let frameCount = 0;
 let rafId = 0;
@@ -1412,7 +1688,6 @@ function animate(time){
   const dt = Math.min((time-lastTime)/1000, 0.1);
   lastTime = time;
   animTime += dt;
-  // En móvil estable, saltar la actualización de instancias en frames impares (mitad de coste)
   const idleSkip = isMobile && growthTarget===1 && (frameCount & 1) === 1;
 
   if (prefersReducedMotion){
